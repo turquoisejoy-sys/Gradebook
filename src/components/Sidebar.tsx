@@ -22,6 +22,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { SyncStatus } from '@/lib/sync';
 import { Class } from '@/types';
+import { getCurrentAcademicYear } from '@/lib/storage';
 
 interface SidebarProps {
   currentClassId: string | null;
@@ -44,6 +45,10 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Quick Class Switch only lists this school year's classes
+  const currentYear = getCurrentAcademicYear();
+  const switchableClasses = classes.filter(cls => cls.academicYear === currentYear);
 
   const classBasePath = currentClassId ? `/classes/${currentClassId}` : '';
 
@@ -163,7 +168,7 @@ export default function Sidebar({
           </Link>
         ))}
 
-        {classes.length > 0 && (
+        {switchableClasses.length > 0 && (
           <div className="px-3 pt-2 pb-3">
             <label className="block text-xs font-semibold uppercase tracking-wider text-white/40 mb-2">
               Quick Class Switch
@@ -176,7 +181,7 @@ export default function Sidebar({
               <option value="" className="text-gray-900">
                 Select a class...
               </option>
-              {classes.map((cls) => (
+              {switchableClasses.map((cls) => (
                 <option key={cls.id} value={cls.id} className="text-gray-900">
                   {cls.name} • {cls.schedule}
                 </option>
