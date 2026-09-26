@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useApp } from '@/components/AppShell';
+import InfoTip from '@/components/InfoTip';
 import {
   getStudentsByClass,
   getClasses,
@@ -13,7 +14,6 @@ import {
   getCASASTestsByStudent,
   getUnitTestsByStudent,
   getAttendanceByStudent,
-  getISSTRecordsByStudent,
   getNotesByStudent,
   getSpeakingTestsByClass,
   getSpeakingTestResults,
@@ -27,7 +27,7 @@ import {
   getColorLevel,
   getColorClass,
 } from '@/lib/calculations';
-import { Student, Class, ReportCard, StudentWithStats, CASASTest, UnitTest, Attendance, ISSTRecord, StudentNote, SpeakingTest, WritingTest } from '@/types';
+import { Student, Class, ReportCard, StudentWithStats, CASASTest, UnitTest, Attendance, StudentNote, SpeakingTest, WritingTest } from '@/types';
 import { useTeacherName } from '@/hooks/useTeacherName';
 import { subscribeSyncStatus } from '@/lib/sync';
 import {
@@ -342,6 +342,7 @@ function usePrintMode(): boolean {
 
 export default function ReportCardsPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const { setCurrentClassId, mounted } = useApp();
   const classId = params.classId as string;
   const printRef = useRef<HTMLDivElement>(null);
@@ -369,7 +370,6 @@ export default function ReportCardsPage() {
   const [listeningTests, setListeningTests] = useState<CASASTest[]>([]);
   const [unitTests, setUnitTests] = useState<UnitTest[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
-  const [isstRecords, setIsstRecords] = useState<ISSTRecord[]>([]);
   const [studentNotes, setStudentNotes] = useState<StudentNote[]>([]);
   const [speakingTests, setSpeakingTests] = useState<SpeakingTest[]>([]);
   const [writingTests, setWritingTests] = useState<WritingTest[]>([]);
@@ -385,9 +385,13 @@ export default function ReportCardsPage() {
         setStudents(studentList);
         const ranked = getStudentsWithRanks(studentList, cls);
         setStudentsWithRanks(ranked);
+        const fromQuery = searchParams.get('student');
+        if (fromQuery && ranked.some(s => s.id === fromQuery)) {
+          setSelectedStudentId(fromQuery);
+        }
       }
     }
-  }, [classId, setCurrentClassId, mounted]);
+  }, [classId, setCurrentClassId, mounted, searchParams]);
 
   /** Always read ranks + tests from storage so “New” report card matches Analysis / latest CASAS. */
   const reloadLiveStudentData = useCallback(
@@ -401,7 +405,6 @@ export default function ReportCardsPage() {
       setListeningTests(getCASASTestsByStudent(studentId, 'listening'));
       setUnitTests(getUnitTestsByStudent(studentId));
       setAttendance(getAttendanceByStudent(studentId));
-      setIsstRecords(getISSTRecordsByStudent(studentId));
       setStudentNotes(getNotesByStudent(studentId));
       setSpeakingTests(getSpeakingTestsByClass(classId));
       setWritingTests(getWritingTestsByClass(classId));
@@ -599,7 +602,10 @@ export default function ReportCardsPage() {
       {/* Header - Hidden when printing */}
       <div className="flex items-center justify-between print:hidden">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--cace-navy)]">Report Cards</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[var(--cace-navy)]">Report Cards</h1>
+            <InfoTip text="Select a student to view live stats, write comments, save, and print a progress report. Open a student’s hub for all notes and speaking/writing comments." />
+          </div>
           <p className="text-gray-600">{currentClass.name}</p>
         </div>
       </div>
@@ -972,67 +978,26 @@ export default function ReportCardsPage() {
           </div>
         </div>
 
-      {/* Reference: ISST & Notes — on-screen only; not part of printed report */}
+      {/* Reference: Notes — on-screen only; not part of printed report */}
       {selectedStudentId && (
         <div className="card mt-6 print:hidden">
           <h3 className="text-sm font-semibold text-[var(--cace-navy)] mb-3">Reference for teacher comments</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-            <div>
-              <h4 className="font-medium text-gray-700 mb-2">ISST attendance</h4>
-              {(() => {
-                const monthTotals = new Map<string, number>();
-                for (const r of isstRecords) {
-                  if (!Array.isArray(r.dates) || r.dates.length === 0) continue;
-                  const key = r.month;
-                  monthTotals.set(key, (monthTotals.get(key) ?? 0) + r.dates.length);
-                }
-                const monthsSorted = [...monthTotals.keys()].sort((a, b) => b.localeCompare(a));
-                if (monthsSorted.length === 0) {
-                  return (
-                    <p className="text-gray-400 text-xs">No ISST dates recorded</p>
-                  );
-                }
-                const formatMonthLabel = (monthKey: string) => {
-                  const [y, m] = monthKey.split('-');
-                  const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                  const idx = parseInt(m, 10) - 1;
-                  const label = idx >= 0 && idx < 12 ? names[idx] : m;
-                  return `${label} ${y}`;
-                };
-                return (
-                  <ul className="space-y-2">
-                    {monthsSorted.map((monthKey) => {
-                      const count = monthTotals.get(monthKey) ?? 0;
-                      return (
-                        <li key={monthKey} className="text-gray-700">
-                          <span className="font-medium">{formatMonthLabel(monthKey)}:</span>{' '}
-                          <span className="tabular-nums">
-                            {count} {count === 1 ? 'time' : 'times'}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                );
-              })()}
-            </div>
-            <div>
-              <h4 className="font-medium text-gray-700 mb-2">Notes</h4>
-              {studentNotes.length === 0 ? (
-                <p className="text-gray-400 text-xs">No notes</p>
-              ) : (
-                <ul className="space-y-2">
-                  {studentNotes
-                    .sort((a, b) => b.date.localeCompare(a.date))
-                    .map((n) => (
-                      <li key={n.id} className="text-gray-700">
-                        <span className="text-gray-500 text-xs">{n.date}</span>
-                        <p className="mt-0.5 whitespace-pre-wrap">{n.content}</p>
-                      </li>
-                    ))}
-                </ul>
-              )}
-            </div>
+          <div className="text-sm">
+            <h4 className="font-medium text-gray-700 mb-2">Notes</h4>
+            {studentNotes.length === 0 ? (
+              <p className="text-gray-400 text-xs">No notes</p>
+            ) : (
+              <ul className="space-y-2">
+                {studentNotes
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                  .map((n) => (
+                    <li key={n.id} className="text-gray-700">
+                      <span className="text-gray-500 text-xs">{n.date}</span>
+                      <p className="mt-0.5 whitespace-pre-wrap">{n.content}</p>
+                    </li>
+                  ))}
+              </ul>
+            )}
           </div>
         </div>
       )}

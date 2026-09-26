@@ -2,10 +2,7 @@
  * KPI snapshot + superlatives for the class KPI print tool.
  */
 
-import {
-  getStudentsByClass,
-  getISSTRecordsByStudent,
-} from '@/lib/storage';
+import { getStudentsByClass } from '@/lib/storage';
 import {
   calculate30DayRetention,
   calculateYTDRetention,
@@ -134,10 +131,6 @@ function placesFromStats(
   return distinctValuePlaces(pairs, true, formatValue);
 }
 
-function isstSessionCount(studentId: string): number {
-  return getISSTRecordsByStudent(studentId).reduce((sum, r) => sum + r.dates.length, 0);
-}
-
 /**
  * Superlatives: top 3 distinct scores per category (active roster). Ties share a rank;
  * next rank uses the next distinct value (competition / "122" ranking).
@@ -166,22 +159,6 @@ export function getSuperlatives(classId: string): SuperlativeRow[] {
   const tests = placesFromStats(stats, s => s.testAverage, v => `${v.toFixed(0)}%`);
   if (tests) {
     rows.push({ category: 'Best Unit tests scores (average %)', places: tests });
-  }
-
-  const isstPairs = stats.map(s => ({
-    name: s.name,
-    v: isstSessionCount(s.id),
-  }));
-  const isstMax = Math.max(0, ...isstPairs.map(p => p.v));
-  if (isstMax > 0) {
-    const isstPlaces = distinctValuePlaces(
-      isstPairs,
-      true,
-      v => (v === 1 ? '1 session' : `${v} sessions`),
-    );
-    if (isstPlaces) {
-      rows.push({ category: 'Most ISST sessions attended', places: isstPlaces });
-    }
   }
 
   const rg = placesFromStats(

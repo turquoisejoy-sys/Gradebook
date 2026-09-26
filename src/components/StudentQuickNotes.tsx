@@ -112,13 +112,22 @@ export default function StudentQuickNotes({
               </div>
 
               <div className="flex items-center justify-between gap-3">
-                <Link
-                  href={`/classes/${classId}/notes#student-${studentId}`}
-                  className="text-sm text-[var(--cace-teal)] hover:underline"
-                  onClick={closeModal}
-                >
-                  Open full notes page
-                </Link>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+                  <Link
+                    href={`/classes/${classId}/students/${studentId}`}
+                    className="text-[var(--cace-teal)] hover:underline"
+                    onClick={closeModal}
+                  >
+                    Student hub
+                  </Link>
+                  <Link
+                    href={`/classes/${classId}/notes#student-${studentId}`}
+                    className="text-[var(--cace-teal)] hover:underline"
+                    onClick={closeModal}
+                  >
+                    Full notes page
+                  </Link>
+                </div>
                 <div className="flex items-center gap-3">
                   {saveMessage && <span className="text-sm text-green-600">{saveMessage}</span>}
                   <button

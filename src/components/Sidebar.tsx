@@ -18,7 +18,6 @@ import {
   CloudIcon,
   CloudArrowUpIcon,
   ExclamationCircleIcon,
-  ClockIcon,
 } from '@heroicons/react/24/outline';
 import { SyncStatus } from '@/lib/sync';
 import { Class } from '@/types';
@@ -59,7 +58,6 @@ export default function Sidebar({
   const classLinks = currentClassId ? [
     { href: `${classBasePath}/students`, label: 'Students', icon: UserGroupIcon },
     { href: `${classBasePath}/notes`, label: 'Notes', icon: PencilSquareIcon },
-    { href: `${classBasePath}/isst`, label: 'ISST', icon: ClockIcon },
     { href: `${classBasePath}/attendance`, label: 'Attendance', icon: CalendarDaysIcon },
     { href: `${classBasePath}/casas-reading`, label: 'CASAS Reading', icon: AcademicCapIcon },
     { href: `${classBasePath}/casas-listening`, label: 'CASAS Listening', icon: AcademicCapIcon },
@@ -148,7 +146,7 @@ export default function Sidebar({
       {/* Logo / Header */}
       <div className="p-6 border-b border-white/10">
         <h1 className="text-xl font-bold tracking-tight">CACE Gradebook</h1>
-        <p className="text-sm text-white/60 mt-1">A World of Opportunity</p>
+        <p className="text-sm text-white/60 mt-1">Ms. Katie Salsbury</p>
         {/* Sync Status */}
         <div className="mt-3">
           {getSyncIndicator()}

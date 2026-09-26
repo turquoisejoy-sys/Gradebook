@@ -25,13 +25,6 @@ export {
 } from './tests-parser';
 
 export {
-  parseISSTFile,
-  parseISSTFileFromInput,
-  type ISSTParseResult,
-  type ISSTImportRow,
-} from './isst-parser';
-
-export {
   parseStudentGainsFile,
   parseStudentGainsFileFromInput,
   normalizeStudentNameKey,

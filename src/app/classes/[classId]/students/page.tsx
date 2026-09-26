@@ -321,7 +321,7 @@ export default function StudentsPage() {
                 <tr key={student.id}>
                   <td>
                     <Link
-                      href={`/classes/${classId}/notes`}
+                      href={`/classes/${classId}/students/${student.id}`}
                       className="font-medium text-[var(--cace-navy)] hover:text-[var(--cace-teal)]"
                     >
                       {student.name}

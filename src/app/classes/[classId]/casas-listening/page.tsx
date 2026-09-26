@@ -26,6 +26,13 @@ import {
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import StudentQuickNotes from '@/components/StudentQuickNotes';
+import InfoTip from '@/components/InfoTip';
+
+const CASAS_SCORES_IMPORT_TIP =
+  'Import File: CASAS test-results Excel/CSV with Student Name (or First + Last), Test Date, Form, and Scale Score. Forms ending in R are reading; L are listening. The same export works on Reading or Listening — both modalities import, but only students on this class roster. Duplicates are skipped.';
+
+const CASAS_GAINS_IMPORT_TIP =
+  'Import Student Gains: CASAS Student Gains export (e.g. StudentGains.xlsx). Updates Gain and Level Complete for reading and listening on this roster. You can run it from Reading or Listening — it updates both.';
 
 interface StudentWithTests {
   student: Student;
@@ -289,7 +296,14 @@ export default function CASASListeningPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--cace-navy)]">CASAS Listening</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[var(--cace-navy)]">CASAS Listening</h1>
+            <InfoTip
+              wide
+              label="How to import CASAS listening"
+              text={`${CASAS_SCORES_IMPORT_TIP} ${CASAS_GAINS_IMPORT_TIP}`}
+            />
+          </div>
           <p className="text-gray-600">
             {currentClass.name} • Target: {currentClass.casasListeningTarget} (from {currentClass.casasListeningLevelStart})
           </p>
@@ -317,23 +331,29 @@ export default function CASASListeningPage() {
             accept=".xlsx,.xls,.csv"
             className="hidden"
           />
-          <button
-            onClick={() => gainsFileInputRef.current?.click()}
-            disabled={isGainsImporting}
-            className="btn btn-secondary"
-            title="CASAS Student Gains export (reading + listening gains and level complete)"
-          >
-            <ArrowUpTrayIcon className="w-5 h-5" />
-            {isGainsImporting ? 'Importing…' : 'Import Student Gains'}
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            className="btn btn-secondary"
-          >
-            <ArrowUpTrayIcon className="w-5 h-5" />
-            {isImporting ? 'Importing...' : 'Import File'}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => gainsFileInputRef.current?.click()}
+              disabled={isGainsImporting}
+              className="btn btn-secondary"
+              title="CASAS Student Gains export (reading + listening gains and level complete)"
+            >
+              <ArrowUpTrayIcon className="w-5 h-5" />
+              {isGainsImporting ? 'Importing…' : 'Import Student Gains'}
+            </button>
+            <InfoTip wide text={CASAS_GAINS_IMPORT_TIP} label="What is Student Gains import" />
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+              className="btn btn-secondary"
+            >
+              <ArrowUpTrayIcon className="w-5 h-5" />
+              {isImporting ? 'Importing...' : 'Import File'}
+            </button>
+            <InfoTip wide text={CASAS_SCORES_IMPORT_TIP} label="What is CASAS scores import" />
+          </div>
           <button
             onClick={handleUndoLastImport}
             disabled={lastImportTestIds.length === 0}

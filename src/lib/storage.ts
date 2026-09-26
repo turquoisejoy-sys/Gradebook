@@ -14,7 +14,6 @@ import {
   ColorThresholds,
   CACELevel,
   CACE_LEVELS,
-  ISSTRecord,
   StudentNote,
 } from '@/types';
 import { importNamesMatch, normalizeNameForMatching } from './calculations';
@@ -118,7 +117,6 @@ export function getCloudSyncPayload(): CloudSyncPayload {
     attendance: getFromStorage<Attendance[]>(STORAGE_KEYS.attendance, []),
     reportCards: getFromStorage<ReportCard[]>(STORAGE_KEYS.reportCards, []),
     studentNotes: getFromStorage<StudentNote[]>(STORAGE_KEYS.studentNotes, []),
-    isstRecords: getFromStorage<ISSTRecord[]>(STORAGE_KEYS.isstRecords, []),
     speakingTests: getFromStorage<SpeakingTest[]>(STORAGE_KEYS.speakingTests, []),
     speakingTestResults: getFromStorage<SpeakingTestResult[]>(STORAGE_KEYS.speakingTestResults, []),
     writingTests: getFromStorage<WritingTest[]>(STORAGE_KEYS.writingTests, []),
@@ -159,7 +157,6 @@ export async function syncFromCloud(): Promise<boolean> {
     const localAttendance = getFromStorage<Attendance[]>(STORAGE_KEYS.attendance, []);
     const localReportCards = getFromStorage<ReportCard[]>(STORAGE_KEYS.reportCards, []);
     const localStudentNotes = getFromStorage<StudentNote[]>(STORAGE_KEYS.studentNotes, []);
-    const localISSTRecords = getFromStorage<ISSTRecord[]>(STORAGE_KEYS.isstRecords, []);
     const localSpeakingTests = getFromStorage<SpeakingTest[]>(STORAGE_KEYS.speakingTests, []);
     const localSpeakingTestResults = getFromStorage<SpeakingTestResult[]>(STORAGE_KEYS.speakingTestResults, []);
     const localWritingTests = getFromStorage<WritingTest[]>(STORAGE_KEYS.writingTests, []);
@@ -175,7 +172,6 @@ export async function syncFromCloud(): Promise<boolean> {
     const cloudAttendanceFiltered = cloudData.attendance.filter(a => !deletedStudentIds.has(a.studentId));
     const cloudReportCardsFiltered = cloudData.reportCards.filter(r => !deletedStudentIds.has(r.studentId));
     const cloudStudentNotesFiltered = cloudData.studentNotes.filter(n => !deletedStudentIds.has(n.studentId));
-    const cloudISSTFiltered = cloudData.isstRecords.filter(r => !deletedStudentIds.has(r.studentId));
     const cloudSpeakingTestsFiltered = cloudData.speakingTests.filter(
       t => !deletedClassIds.has(t.classId),
     );
@@ -249,7 +245,6 @@ export async function syncFromCloud(): Promise<boolean> {
     const mergedAttendance = mergeArrays(localAttendance, cloudAttendanceFiltered);
     const mergedReportCards = mergeArrays(localReportCards, cloudReportCardsFiltered);
     const mergedStudentNotes = mergeArrays(localStudentNotes, cloudStudentNotesFiltered);
-    const mergedISSTRecords = mergeArrays(localISSTRecords, cloudISSTFiltered);
     const mergedSpeakingTests = mergeArrays(localSpeakingTests, cloudSpeakingTestsFiltered);
     const mergedSpeakingTestResults = mergeArrays(
       localSpeakingTestResults,
@@ -269,7 +264,6 @@ export async function syncFromCloud(): Promise<boolean> {
     saveToStorage(STORAGE_KEYS.attendance, mergedAttendance);
     saveToStorage(STORAGE_KEYS.reportCards, mergedReportCards);
     saveToStorage(STORAGE_KEYS.studentNotes, mergedStudentNotes);
-    saveToStorage(STORAGE_KEYS.isstRecords, mergedISSTRecords);
     saveToStorage(STORAGE_KEYS.speakingTests, mergedSpeakingTests);
     saveToStorage(STORAGE_KEYS.speakingTestResults, mergedSpeakingTestResults);
     saveToStorage(STORAGE_KEYS.writingTests, mergedWritingTests);
@@ -485,9 +479,6 @@ export function deleteClass(classId: string): void {
 
   const reportCards = getReportCards().filter(r => !studentIdsToDelete.has(r.studentId));
   saveReportCards(reportCards);
-
-  const isstRecords = getISSTRecords().filter(r => !studentIdsToDelete.has(r.studentId));
-  saveISSTRecords(isstRecords);
 
   const studentNotes = getStudentNotes().filter(n => !studentIdsToDelete.has(n.studentId));
   saveStudentNotes(studentNotes);
@@ -1428,7 +1419,6 @@ export function archiveCurrentYear(yearName: string): ArchivedYear {
       writingTests: getWritingTests(),
       writingTestResults: getWritingTestResults(),
       studentNotes: getStudentNotes(),
-      isstRecords: getISSTRecords(),
     },
   };
 
@@ -1448,7 +1438,6 @@ export function archiveCurrentYear(yearName: string): ArchivedYear {
   saveWritingTests([]);
   saveWritingTestResults([]);
   saveStudentNotes([]);
-  saveISSTRecords([]);
   setCurrentClassId(null);
 
   return archive;
@@ -1530,151 +1519,6 @@ export function migrateOldNotesToNewSystem(classId: string): void {
 }
 
 // ============================================
-// ISST Records CRUD
-// ============================================
-
-/** Supabase/text columns sometimes return dates as a JSON string instead of an array */
-function normalizeISSTDatesField(value: unknown): string[] {
-  if (value == null) return [];
-  if (Array.isArray(value)) {
-    return value.map(String).filter(Boolean);
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return [];
-    try {
-      const parsed = JSON.parse(trimmed) as unknown;
-      return normalizeISSTDatesField(parsed);
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
-function normalizeISSTRecord(record: ISSTRecord): ISSTRecord {
-  return {
-    ...record,
-    dates: normalizeISSTDatesField((record as { dates?: unknown }).dates),
-  };
-}
-
-function getISSTRecords(): ISSTRecord[] {
-  if (typeof window === 'undefined') return [];
-  const data = localStorage.getItem(STORAGE_KEYS.isstRecords);
-  if (!data) return [];
-  try {
-    const raw = JSON.parse(data) as ISSTRecord[];
-    if (!Array.isArray(raw)) return [];
-    return raw.map(normalizeISSTRecord);
-  } catch {
-    return [];
-  }
-}
-
-function saveISSTRecords(records: ISSTRecord[]): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEYS.isstRecords, JSON.stringify(records));
-  triggerSync();
-}
-
-export function getISSTRecordsByStudent(studentId: string): ISSTRecord[] {
-  return getISSTRecords().filter(r => r.studentId === studentId);
-}
-
-export function getISSTRecordsByClass(classId: string): ISSTRecord[] {
-  const students = getStudentsByClass(classId);
-  const studentIds = new Set(students.map(s => s.id));
-  return getISSTRecords().filter(r => studentIds.has(r.studentId));
-}
-
-export function getISSTRecord(studentId: string, month: string): ISSTRecord | undefined {
-  return getISSTRecords().find(r => r.studentId === studentId && r.month === month);
-}
-
-export function addISSTDate(studentId: string, month: string, date: string): ISSTRecord {
-  const records = getISSTRecords();
-  const existingIndex = records.findIndex(r => r.studentId === studentId && r.month === month);
-  
-  if (existingIndex >= 0) {
-    // Add date to existing record if not already present
-    if (!records[existingIndex].dates.includes(date)) {
-      records[existingIndex].dates.push(date);
-      records[existingIndex].dates.sort();
-      records[existingIndex].updatedAt = new Date().toISOString();
-    }
-    saveISSTRecords(records);
-    return records[existingIndex];
-  } else {
-    // Create new record
-    const newRecord: ISSTRecord = {
-      id: generateId(),
-      studentId,
-      month,
-      dates: [date],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    records.push(newRecord);
-    saveISSTRecords(records);
-    return newRecord;
-  }
-}
-
-export function removeISSTDate(studentId: string, month: string, date: string): void {
-  const records = getISSTRecords();
-  const existingIndex = records.findIndex(r => r.studentId === studentId && r.month === month);
-  
-  if (existingIndex >= 0) {
-    const recordId = records[existingIndex].id;
-    records[existingIndex].dates = records[existingIndex].dates.filter(d => d !== date);
-    records[existingIndex].updatedAt = new Date().toISOString();
-    
-    // Remove record entirely if no dates left
-    if (records[existingIndex].dates.length === 0) {
-      records.splice(existingIndex, 1);
-      // Delete from cloud since record is removed
-      deleteFromCloud('isst_records', recordId).catch(err => console.error('Failed to delete ISST record from cloud:', err));
-    }
-    
-    saveISSTRecords(records);
-  }
-}
-
-export function updateISSTDates(studentId: string, month: string, dates: string[]): ISSTRecord | null {
-  const records = getISSTRecords();
-  const existingIndex = records.findIndex(r => r.studentId === studentId && r.month === month);
-  
-  if (dates.length === 0) {
-    // Remove record if no dates
-    if (existingIndex >= 0) {
-      records.splice(existingIndex, 1);
-      saveISSTRecords(records);
-    }
-    return null;
-  }
-  
-  if (existingIndex >= 0) {
-    records[existingIndex].dates = [...dates].sort();
-    records[existingIndex].updatedAt = new Date().toISOString();
-    saveISSTRecords(records);
-    return records[existingIndex];
-  } else {
-    const newRecord: ISSTRecord = {
-      id: generateId(),
-      studentId,
-      month,
-      dates: [...dates].sort(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    records.push(newRecord);
-    saveISSTRecords(records);
-    return newRecord;
-  }
-}
-
-// ============================================
 // Export/Import
 // ============================================
 
@@ -1687,7 +1531,6 @@ export function exportAllData(): string {
     attendance: getAttendance(),
     reportCards: getReportCards(),
     studentNotes: getStudentNotes(),
-    isstRecords: getISSTRecords(),
     speakingTests: getSpeakingTests(),
     speakingTestResults: getSpeakingTestResults(),
     writingTests: getWritingTests(),
@@ -1711,7 +1554,6 @@ export function importAllData(jsonString: string): boolean {
     if (data.attendance) saveAttendance(data.attendance);
     if (data.reportCards) saveReportCards(data.reportCards);
     if (data.studentNotes) saveStudentNotes(data.studentNotes);
-    if (data.isstRecords) saveISSTRecords(data.isstRecords);
     if (data.speakingTests) saveSpeakingTests(data.speakingTests);
     if (data.speakingTestResults) saveSpeakingTestResults(data.speakingTestResults);
     if (data.writingTests) saveWritingTests(data.writingTests);

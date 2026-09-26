@@ -21,6 +21,10 @@ import { parseFinalScoreFileFromInput } from '@/lib/parsers';
 import { compareStudentsByLastName } from '@/lib/calculations';
 import type { Class, SpeakingTest, SpeakingTestResult, Student } from '@/types';
 import { ArrowUpTrayIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import InfoTip from '@/components/InfoTip';
+
+const SPEAKING_IMPORT_TIP =
+  'Import scores into the selected speaking test: Excel/CSV (.xlsx, .xls, or .csv) with student names (or First + Last) and a Speaking Score column. The Exit Assessments worksheet works — it picks the AM or PM sheet from this class’s Morning/Evening schedule. Scores are matched to students on this roster and clamped to the test’s total points.';
 
 function scoresToMap(rows: SpeakingTestResult[]): Map<string, SpeakingTestResult> {
   return new Map(rows.map(row => [row.studentId, row]));
@@ -229,7 +233,10 @@ export default function SpeakingPage() {
     <div className="mx-auto w-full min-w-0 max-w-full space-y-6 px-4 pb-10">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--cace-navy)]">Speaking</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[var(--cace-navy)]">Speaking</h1>
+            <InfoTip wide text={SPEAKING_IMPORT_TIP} label="How to import speaking scores" />
+          </div>
           <p className="text-gray-600">{currentClass.name}</p>
         </div>
         <button
@@ -340,7 +347,7 @@ export default function SpeakingPage() {
                 <p><span className="font-medium">Total points:</span> {selectedTest?.totalPoints ?? '—'}</p>
                 <p><span className="font-medium">Passing score:</span> {selectedTest?.passingScore ?? '—'}</p>
               </div>
-              <div className="flex justify-start md:justify-end gap-2 flex-wrap">
+              <div className="flex justify-start md:justify-end gap-2 flex-wrap items-center">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -348,16 +355,19 @@ export default function SpeakingPage() {
                   className="hidden"
                   onChange={handleImportFile}
                 />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="btn btn-secondary inline-flex items-center gap-2"
-                  disabled={!selectedTest || isImporting}
-                  title="Excel/CSV with student name + Speaking Score (e.g. Exit Assessments worksheet)"
-                >
-                  <ArrowUpTrayIcon className="w-5 h-5" />
-                  {isImporting ? 'Importing...' : 'Import scores'}
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="btn btn-secondary inline-flex items-center gap-2"
+                    disabled={!selectedTest || isImporting}
+                    title="Excel/CSV with student name + Speaking Score (e.g. Exit Assessments worksheet)"
+                  >
+                    <ArrowUpTrayIcon className="w-5 h-5" />
+                    {isImporting ? 'Importing...' : 'Import scores'}
+                  </button>
+                  <InfoTip wide text={SPEAKING_IMPORT_TIP} label="How to import speaking scores" />
+                </div>
                 <button
                   type="button"
                   className="btn btn-secondary text-red-700 border-red-200 hover:bg-red-50 inline-flex items-center gap-1.5"

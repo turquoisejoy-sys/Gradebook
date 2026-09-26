@@ -720,7 +720,7 @@ export default function SettingsPage() {
         <div className="text-gray-600 space-y-2">
           <p><strong>CACE Gradebook</strong></p>
           <p>Built for Campbell Adult and Community Education</p>
-          <p className="text-sm text-gray-500 italic">"A World of Opportunity"</p>
+          <p className="text-sm text-gray-500 italic">Ms. Katie Salsbury</p>
         </div>
       </div>
     </div>

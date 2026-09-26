@@ -28,6 +28,10 @@ import {
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import StudentQuickNotes from '@/components/StudentQuickNotes';
+import InfoTip from '@/components/InfoTip';
+
+const UNIT_TESTS_IMPORT_TIP =
+  'Import Test: Excel/CSV of scores (0–100). Single-test file needs Student Name + Score; after you pick the file, enter the test name and date. Or use a Progress Tracker workbook (test name columns with “Date:” rows) to import multiple tests at once. Only names matching this class roster get scores.';
 
 interface TestColumn {
   testName: string;
@@ -447,10 +451,13 @@ export default function UnitTestsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--cace-navy)]">Unit Tests</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[var(--cace-navy)]">Unit Tests</h1>
+            <InfoTip wide text={UNIT_TESTS_IMPORT_TIP} label="How to import unit tests" />
+          </div>
           <p className="text-gray-600">{currentClass.name}</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center">
           <button
             onClick={() => setShowAddTestRow(true)}
             className="btn btn-secondary"
@@ -465,13 +472,16 @@ export default function UnitTestsPage() {
             accept=".xlsx,.xls,.csv"
             className="hidden"
           />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="btn btn-secondary"
-          >
-            <ArrowUpTrayIcon className="w-5 h-5" />
-            Import Test
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="btn btn-secondary"
+            >
+              <ArrowUpTrayIcon className="w-5 h-5" />
+              Import Test
+            </button>
+            <InfoTip wide text={UNIT_TESTS_IMPORT_TIP} label="How to import unit tests" />
+          </div>
         </div>
       </div>
 
@@ -810,9 +820,12 @@ export default function UnitTestsPage() {
         <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">
-                {isMultiTestFile ? 'Import Multiple Tests' : 'Import Test Scores'}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-semibold">
+                  {isMultiTestFile ? 'Import Multiple Tests' : 'Import Test Scores'}
+                </h2>
+                <InfoTip wide text={UNIT_TESTS_IMPORT_TIP} label="How to import unit tests" />
+              </div>
               <button onClick={() => setShowImportModal(false)} className="p-1 hover:bg-gray-100 rounded">
                 <XMarkIcon className="w-5 h-5" />
               </button>

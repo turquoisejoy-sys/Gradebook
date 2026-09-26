@@ -34,6 +34,10 @@ import {
 import { StopIcon } from '@heroicons/react/24/solid';
 import Link from 'next/link';
 import StudentQuickNotes from '@/components/StudentQuickNotes';
+import InfoTip from '@/components/InfoTip';
+
+const ATTENDANCE_IMPORT_TIP =
+  'Import one month at a time from your attendance Excel/CSV (.xlsx, .xls, or .csv). Use the monthly report with student names (or First + Last), “Total Hrs_Reg + Bulk in Date Range,” and “Class Scheduled Hrs in Date Range.” After you pick the file, choose which month it is for — the month is not read from the file.';
 
 // School year months (Aug - Jun)
 const MONTHS = [
@@ -541,7 +545,10 @@ export default function AttendancePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--cace-navy)]">Attendance</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[var(--cace-navy)]">Attendance</h1>
+            <InfoTip wide text={ATTENDANCE_IMPORT_TIP} label="How to import attendance" />
+          </div>
           <p className="text-gray-600">
             {currentClass.name} • {selectedYear}-{selectedYear + 1}
           </p>
@@ -774,11 +781,20 @@ export default function AttendancePage() {
         <div className="modal-overlay" onClick={() => resetImportModal()}>
           <div className="modal max-w-lg" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">
-                {importStep === 'select-month' && 'Import Attendance'}
-                {importStep === 'review-zero' && 'Zero Attendance Review'}
-                {importStep === 'review-new' && 'Review Roster Changes'}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-semibold">
+                  {importStep === 'select-month' && 'Import Attendance'}
+                  {importStep === 'review-zero' && 'Zero Attendance Review'}
+                  {importStep === 'review-new' && 'Review Roster Changes'}
+                </h2>
+                {importStep === 'select-month' && (
+                  <InfoTip
+                    wide
+                    text={ATTENDANCE_IMPORT_TIP}
+                    label="How to import attendance"
+                  />
+                )}
+              </div>
               <button onClick={() => resetImportModal()} className="p-1 hover:bg-gray-100 rounded">
                 <XMarkIcon className="w-5 h-5" />
               </button>
@@ -787,6 +803,10 @@ export default function AttendancePage() {
             {importStep === 'select-month' && (
               <>
                 <div className="space-y-4">
+                  <p className="text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                    Use your monthly attendance spreadsheet (Excel/CSV) with hours in date range.
+                    Then pick the month below — it is not taken from the file.
+                  </p>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Which month is this attendance for?

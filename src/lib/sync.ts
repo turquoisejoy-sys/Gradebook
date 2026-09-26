@@ -26,7 +26,6 @@ import {
   Attendance,
   ReportCard,
   StudentNote,
-  ISSTRecord,
 } from '@/types';
 
 // ============================================
@@ -350,27 +349,6 @@ export async function uploadStudentNotes(notes: StudentNote[]): Promise<void> {
   }
 }
 
-export async function uploadISSTRecords(records: ISSTRecord[]): Promise<void> {
-  if (!isSupabaseConfigured()) return;
-  if (records.length === 0) return;
-  
-  try {
-    const data = records.map(r => toSnakeCase(r as unknown as Record<string, unknown>));
-    
-    const { error } = await supabase
-      .from('isst_records')
-      .upsert(data, { onConflict: 'id' });
-    
-    if (error) {
-      // Log but don't throw - table might not exist yet
-      console.log('isst_records sync skipped (table may not exist):', getSyncErrorMessage(error));
-    }
-  } catch {
-    // Silently fail - table doesn't exist yet
-    console.log('isst_records sync skipped');
-  }
-}
-
 function normalizeSpeakingTestForCloud(test: SpeakingTest): Record<string, unknown> {
   return toSnakeCase({
     ...test,
@@ -527,28 +505,6 @@ export async function downloadStudentNotes(): Promise<StudentNote[]> {
   }
 }
 
-export async function downloadISSTRecords(): Promise<ISSTRecord[]> {
-  if (!isSupabaseConfigured()) return [];
-  
-  try {
-    const { data, error } = await supabase
-      .from('isst_records')
-      .select('*');
-    
-    if (error) {
-      // Table might not exist yet - return empty
-      console.log('isst_records download skipped (table may not exist)');
-      return [];
-    }
-    
-    return (data || []).map(row => toCamelCase(row) as unknown as ISSTRecord);
-  } catch {
-    // Silently fail - table doesn't exist yet
-    console.log('isst_records download skipped');
-    return [];
-  }
-}
-
 export async function downloadSpeakingTests(): Promise<SpeakingTest[]> {
   if (!isSupabaseConfigured()) return [];
 
@@ -651,7 +607,6 @@ export async function uploadAllToCloud(data: {
   attendance: Attendance[];
   reportCards: ReportCard[];
   studentNotes?: StudentNote[];
-  isstRecords?: ISSTRecord[];
   speakingTests?: SpeakingTest[];
   speakingTestResults?: SpeakingTestResult[];
   writingTests?: WritingTest[];
@@ -679,7 +634,6 @@ export async function uploadAllToCloud(data: {
     const validAttendance = data.attendance.filter(a => finalStudentIds.has(a.studentId));
     const validReportCards = data.reportCards.filter(r => finalStudentIds.has(r.studentId));
     const validStudentNotes = (data.studentNotes || []).filter(n => finalStudentIds.has(n.studentId));
-    const validISSTRecords = (data.isstRecords || []).filter(r => finalStudentIds.has(r.studentId));
     const validSpeakingTests = (data.speakingTests || []).filter(t => validClassIds.has(t.classId));
     const validSpeakingTestIds = new Set(validSpeakingTests.map(t => t.id));
     const validSpeakingResults = (data.speakingTestResults || []).filter(
@@ -717,8 +671,6 @@ export async function uploadAllToCloud(data: {
       );
       await uploadStudentNotes([...userStudentNotes, ...bridgeNotes]);
     }
-
-    await uploadISSTRecords(validISSTRecords);
     
     setSyncStatus('synced');
   } catch (error) {
@@ -740,7 +692,6 @@ export async function downloadAllFromCloud(): Promise<{
   attendance: Attendance[];
   reportCards: ReportCard[];
   studentNotes: StudentNote[];
-  isstRecords: ISSTRecord[];
   speakingTests: SpeakingTest[];
   speakingTestResults: SpeakingTestResult[];
   writingTests: WritingTest[];
@@ -762,7 +713,6 @@ export async function downloadAllFromCloud(): Promise<{
       attendance,
       reportCards,
       studentNotesRaw,
-      isstRecords,
       speakingTestsTable,
       speakingTestResultsTable,
       writingTestsTable,
@@ -775,7 +725,6 @@ export async function downloadAllFromCloud(): Promise<{
       downloadAttendance(),
       downloadReportCards(),
       downloadStudentNotes(),
-      downloadISSTRecords(),
       downloadSpeakingTests(),
       downloadSpeakingTestResults(),
       downloadWritingTests(),
@@ -805,7 +754,6 @@ export async function downloadAllFromCloud(): Promise<{
       attendance,
       reportCards,
       studentNotes,
-      isstRecords,
       speakingTests,
       speakingTestResults,
       writingTests,
@@ -922,7 +870,6 @@ export async function testSupabaseSync(): Promise<SyncTestResult> {
     'attendance',
     'report_cards',
     'student_notes',
-    'isst_records',
     'speaking_tests',
     'speaking_test_results',
     'writing_tests',
