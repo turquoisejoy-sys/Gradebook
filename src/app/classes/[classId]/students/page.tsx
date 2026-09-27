@@ -25,8 +25,10 @@ import {
   ArrowRightIcon,
   ArrowUpTrayIcon,
   XMarkIcon,
+  PrinterIcon,
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
+import { printAllStudentHubRecords } from '@/lib/student-hub-print';
 
 export default function StudentsPage() {
   const params = useParams();
@@ -247,6 +249,17 @@ export default function StudentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          {students.length > 0 && (
+            <button
+              type="button"
+              onClick={() => printAllStudentHubRecords(classId)}
+              className="btn btn-secondary"
+              title="Print each student’s hub record on a separate page for year-end files"
+            >
+              <PrinterIcon className="w-5 h-5" />
+              Print all student records
+            </button>
+          )}
           <input
             type="file"
             ref={fileInputRef}

@@ -15,6 +15,7 @@ import {
   CACELevel,
   CACE_LEVELS,
   StudentNote,
+  SkillTag,
 } from '@/types';
 import { importNamesMatch, normalizeNameForMatching } from './calculations';
 import {
@@ -50,6 +51,7 @@ const STORAGE_KEYS = {
   currentClassId: 'gradebook_current_class_id',
   isstRecords: 'gradebook_isst_records',
   studentNotes: 'gradebook_student_notes',
+  skillTags: 'gradebook_skill_tags',
   speakingTests: 'gradebook_speaking_tests',
   speakingTestResults: 'gradebook_speaking_test_results',
   writingTests: 'gradebook_writing_tests',
@@ -117,6 +119,7 @@ export function getCloudSyncPayload(): CloudSyncPayload {
     attendance: getFromStorage<Attendance[]>(STORAGE_KEYS.attendance, []),
     reportCards: getFromStorage<ReportCard[]>(STORAGE_KEYS.reportCards, []),
     studentNotes: getFromStorage<StudentNote[]>(STORAGE_KEYS.studentNotes, []),
+    skillTags: getFromStorage<SkillTag[]>(STORAGE_KEYS.skillTags, []),
     speakingTests: getFromStorage<SpeakingTest[]>(STORAGE_KEYS.speakingTests, []),
     speakingTestResults: getFromStorage<SpeakingTestResult[]>(STORAGE_KEYS.speakingTestResults, []),
     writingTests: getFromStorage<WritingTest[]>(STORAGE_KEYS.writingTests, []),
@@ -157,6 +160,7 @@ export async function syncFromCloud(): Promise<boolean> {
     const localAttendance = getFromStorage<Attendance[]>(STORAGE_KEYS.attendance, []);
     const localReportCards = getFromStorage<ReportCard[]>(STORAGE_KEYS.reportCards, []);
     const localStudentNotes = getFromStorage<StudentNote[]>(STORAGE_KEYS.studentNotes, []);
+    const localSkillTags = getFromStorage<SkillTag[]>(STORAGE_KEYS.skillTags, []);
     const localSpeakingTests = getFromStorage<SpeakingTest[]>(STORAGE_KEYS.speakingTests, []);
     const localSpeakingTestResults = getFromStorage<SpeakingTestResult[]>(STORAGE_KEYS.speakingTestResults, []);
     const localWritingTests = getFromStorage<WritingTest[]>(STORAGE_KEYS.writingTests, []);
@@ -172,6 +176,7 @@ export async function syncFromCloud(): Promise<boolean> {
     const cloudAttendanceFiltered = cloudData.attendance.filter(a => !deletedStudentIds.has(a.studentId));
     const cloudReportCardsFiltered = cloudData.reportCards.filter(r => !deletedStudentIds.has(r.studentId));
     const cloudStudentNotesFiltered = cloudData.studentNotes.filter(n => !deletedStudentIds.has(n.studentId));
+    const cloudSkillTags = cloudData.skillTags || [];
     const cloudSpeakingTestsFiltered = cloudData.speakingTests.filter(
       t => !deletedClassIds.has(t.classId),
     );
@@ -220,20 +225,33 @@ export async function syncFromCloud(): Promise<boolean> {
       const merged = mergeArrays(local, cloud);
       return merged.map(student => {
         const localStudent = local.find(s => s.id === student.id);
-        if (!localStudent) return student;
+        if (!localStudent) {
+          return {
+            ...student,
+            tagIds: Array.isArray(student.tagIds) ? student.tagIds : [],
+          };
+        }
+        let next = student;
         const hasLocalNames =
           Boolean(localStudent.firstName?.trim()) && Boolean(localStudent.lastName?.trim());
         const hasMergedNames =
           Boolean(student.firstName?.trim()) && Boolean(student.lastName?.trim());
         if (hasLocalNames && !hasMergedNames) {
-          return {
-            ...student,
+          next = {
+            ...next,
             firstName: localStudent.firstName,
             lastName: localStudent.lastName,
             name: buildStudentDisplayName(localStudent.firstName!, localStudent.lastName!),
           };
         }
-        return student;
+        const cloudTags = Array.isArray(student.tagIds) ? student.tagIds : [];
+        const localTags = Array.isArray(localStudent.tagIds) ? localStudent.tagIds : [];
+        if (cloudTags.length === 0 && localTags.length > 0) {
+          next = { ...next, tagIds: localTags };
+        } else if (!Array.isArray(student.tagIds)) {
+          next = { ...next, tagIds: localTags };
+        }
+        return next;
       });
     }
     
@@ -245,6 +263,7 @@ export async function syncFromCloud(): Promise<boolean> {
     const mergedAttendance = mergeArrays(localAttendance, cloudAttendanceFiltered);
     const mergedReportCards = mergeArrays(localReportCards, cloudReportCardsFiltered);
     const mergedStudentNotes = mergeArrays(localStudentNotes, cloudStudentNotesFiltered);
+    const mergedSkillTags = mergeArrays(localSkillTags, cloudSkillTags);
     const mergedSpeakingTests = mergeArrays(localSpeakingTests, cloudSpeakingTestsFiltered);
     const mergedSpeakingTestResults = mergeArrays(
       localSpeakingTestResults,
@@ -264,6 +283,7 @@ export async function syncFromCloud(): Promise<boolean> {
     saveToStorage(STORAGE_KEYS.attendance, mergedAttendance);
     saveToStorage(STORAGE_KEYS.reportCards, mergedReportCards);
     saveToStorage(STORAGE_KEYS.studentNotes, mergedStudentNotes);
+    saveToStorage(STORAGE_KEYS.skillTags, mergedSkillTags);
     saveToStorage(STORAGE_KEYS.speakingTests, mergedSpeakingTests);
     saveToStorage(STORAGE_KEYS.speakingTestResults, mergedSpeakingTestResults);
     saveToStorage(STORAGE_KEYS.writingTests, mergedWritingTests);
@@ -544,6 +564,10 @@ export function getStudents(): Student[] {
       (s as Student).lastName = '';
       needsSave = true;
     }
+    if (!Array.isArray(s.tagIds)) {
+      (s as Student).tagIds = [];
+      needsSave = true;
+    }
   }
   if (needsSave) {
     saveToStorage(STORAGE_KEYS.students, students);
@@ -608,6 +632,7 @@ export function createStudent(
     casasListeningGain: null,
     casasReadingLevelComplete: false,
     casasListeningLevelComplete: false,
+    tagIds: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -1519,6 +1544,115 @@ export function migrateOldNotesToNewSystem(classId: string): void {
 }
 
 // ============================================
+// Skill tags (shared focus tags for ISST groups)
+// ============================================
+
+function saveSkillTags(tags: SkillTag[]): void {
+  saveToStorage(STORAGE_KEYS.skillTags, tags);
+  triggerSync();
+}
+
+export function getSkillTags(): SkillTag[] {
+  const tags = getFromStorage<SkillTag[]>(STORAGE_KEYS.skillTags, []);
+  return [...tags].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+}
+
+function normalizeTagLabel(label: string): string {
+  return label.trim().replace(/\s+/g, ' ');
+}
+
+/** Find existing tag by label (case-insensitive) or create a new one. */
+export function findOrCreateSkillTag(label: string): SkillTag {
+  const normalized = normalizeTagLabel(label);
+  if (!normalized) {
+    throw new Error('Tag label is required');
+  }
+  const tags = getFromStorage<SkillTag[]>(STORAGE_KEYS.skillTags, []);
+  const existing = tags.find(t => t.label.toLowerCase() === normalized.toLowerCase());
+  if (existing) return existing;
+  const now = new Date().toISOString();
+  const tag: SkillTag = {
+    id: generateId(),
+    label: normalized,
+    createdAt: now,
+    updatedAt: now,
+  };
+  tags.push(tag);
+  saveSkillTags(tags);
+  return tag;
+}
+
+export function renameSkillTag(tagId: string, label: string): SkillTag | null {
+  const normalized = normalizeTagLabel(label);
+  if (!normalized) return null;
+  const tags = getFromStorage<SkillTag[]>(STORAGE_KEYS.skillTags, []);
+  const index = tags.findIndex(t => t.id === tagId);
+  if (index < 0) return null;
+  const clash = tags.find(
+    t => t.id !== tagId && t.label.toLowerCase() === normalized.toLowerCase(),
+  );
+  if (clash) return null;
+  tags[index] = { ...tags[index], label: normalized, updatedAt: new Date().toISOString() };
+  saveSkillTags(tags);
+  return tags[index];
+}
+
+/** Remove a tag from the library and from all students. */
+export function deleteSkillTag(tagId: string): void {
+  const tags = getFromStorage<SkillTag[]>(STORAGE_KEYS.skillTags, []).filter(t => t.id !== tagId);
+  saveSkillTags(tags);
+  const students = getStudents();
+  let changed = false;
+  for (const s of students) {
+    if (s.tagIds?.includes(tagId)) {
+      s.tagIds = s.tagIds.filter(id => id !== tagId);
+      s.updatedAt = new Date().toISOString();
+      changed = true;
+    }
+  }
+  if (changed) saveStudents(students);
+}
+
+export function addTagToStudent(studentId: string, tagId: string): Student | null {
+  const students = getStudents();
+  const index = students.findIndex(s => s.id === studentId);
+  if (index < 0) return null;
+  const tagIds = Array.isArray(students[index].tagIds) ? [...students[index].tagIds] : [];
+  if (!tagIds.includes(tagId)) {
+    tagIds.push(tagId);
+    students[index] = {
+      ...students[index],
+      tagIds,
+      updatedAt: new Date().toISOString(),
+    };
+    saveStudents(students);
+  }
+  return students[index];
+}
+
+export function removeTagFromStudent(studentId: string, tagId: string): Student | null {
+  const students = getStudents();
+  const index = students.findIndex(s => s.id === studentId);
+  if (index < 0) return null;
+  const tagIds = (students[index].tagIds || []).filter(id => id !== tagId);
+  students[index] = {
+    ...students[index],
+    tagIds,
+    updatedAt: new Date().toISOString(),
+  };
+  saveStudents(students);
+  return students[index];
+}
+
+/** Resolve a student's tags (drops unknown ids). */
+export function getTagsForStudent(studentId: string): SkillTag[] {
+  const student = getStudents().find(s => s.id === studentId);
+  if (!student?.tagIds?.length) return [];
+  const byId = new Map(getSkillTags().map(t => [t.id, t]));
+  return student.tagIds.map(id => byId.get(id)).filter((t): t is SkillTag => !!t);
+}
+
+// ============================================
 // Export/Import
 // ============================================
 
@@ -1531,6 +1665,7 @@ export function exportAllData(): string {
     attendance: getAttendance(),
     reportCards: getReportCards(),
     studentNotes: getStudentNotes(),
+    skillTags: getFromStorage<SkillTag[]>(STORAGE_KEYS.skillTags, []),
     speakingTests: getSpeakingTests(),
     speakingTestResults: getSpeakingTestResults(),
     writingTests: getWritingTests(),
@@ -1554,6 +1689,7 @@ export function importAllData(jsonString: string): boolean {
     if (data.attendance) saveAttendance(data.attendance);
     if (data.reportCards) saveReportCards(data.reportCards);
     if (data.studentNotes) saveStudentNotes(data.studentNotes);
+    if (data.skillTags) saveSkillTags(data.skillTags);
     if (data.speakingTests) saveSpeakingTests(data.speakingTests);
     if (data.speakingTestResults) saveSpeakingTestResults(data.speakingTestResults);
     if (data.writingTests) saveWritingTests(data.writingTests);

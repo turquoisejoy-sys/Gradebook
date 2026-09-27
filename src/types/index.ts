@@ -76,6 +76,8 @@ export interface Student {
   casasListeningGain: number | null;
   casasReadingLevelComplete: boolean;
   casasListeningLevelComplete: boolean;
+  /** Shared focus/skill tags for ISST groups (ids from SkillTag). */
+  tagIds: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -257,6 +259,17 @@ export interface StudentNote {
   content: string;
   date: string;  // YYYY-MM-DD format
   createdAt: string;
+}
+
+// ============================================
+// Skill / focus tags (shared across classes — ISST groups)
+// ============================================
+
+export interface SkillTag {
+  id: string;
+  label: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ============================================

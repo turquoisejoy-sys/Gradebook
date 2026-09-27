@@ -9,6 +9,7 @@ import { Student, Class, StudentNote } from '@/types';
 import { MagnifyingGlassIcon, TrashIcon, XMarkIcon, PencilIcon, PrinterIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import InfoTip from '@/components/InfoTip';
+import { printAllStudentHubRecords } from '@/lib/student-hub-print';
 
 export default function NotesPage() {
   const params = useParams();
@@ -180,87 +181,8 @@ export default function NotesPage() {
     printWindow.print();
   };
 
-  const handlePrintAllNotes = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    const sections = sortStudentsByLastName(students)
-      .map(student => {
-        const notes = [...(notesByStudent[student.id] || [])].sort((a, b) =>
-          a.date.localeCompare(b.date),
-        );
-        const notesHtml =
-          notes.length > 0
-            ? notes
-                .map(
-                  note => `
-          <div style="margin-bottom: 12px; padding: 10px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
-            <p style="font-size: 13px; color: #6b7280; margin: 0 0 6px 0; font-weight: 500;">
-              ${new Date(note.date + 'T00:00:00').toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </p>
-            <p style="margin: 0; white-space: pre-wrap; line-height: 1.5;">${note.content
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')}</p>
-          </div>
-        `,
-                )
-                .join('')
-            : '<p style="color: #9ca3af; font-style: italic; margin: 0 0 8px 0;">No notes recorded.</p>';
-
-        return `
-          <section style="margin-bottom: 32px; page-break-inside: avoid;">
-            <h2 style="color: #1e3a5f; font-size: 18px; margin: 0 0 4px 0;">${student.name}</h2>
-            <p style="color: #6b7280; font-size: 12px; margin: 0 0 12px 0;">
-              Enrolled: ${new Date(student.enrollmentDate + 'T00:00:00').toLocaleDateString()}
-            </p>
-            ${notesHtml}
-          </section>
-        `;
-      })
-      .join('');
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>All Notes - ${currentClass?.name || 'Class'}</title>
-          <style>
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-              max-width: 800px;
-              margin: 0 auto;
-              padding: 40px 20px;
-              color: #1f2937;
-            }
-            h1 {
-              color: #1e3a5f;
-              margin: 0 0 8px 0;
-              font-size: 24px;
-            }
-            .subtitle {
-              color: #6b7280;
-              margin: 0 0 28px 0;
-              font-size: 14px;
-            }
-            @media print {
-              body { padding: 16px; }
-            }
-          </style>
-        </head>
-        <body>
-          <h1>Teacher notes</h1>
-          <p class="subtitle">${currentClass?.name || ''} • ${currentClass?.academicYear || ''} • Year-end folder print</p>
-          ${sections}
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
+  const handlePrintAllStudentRecords = () => {
+    printAllStudentHubRecords(classId);
   };
 
   // Filter students by search
@@ -299,7 +221,7 @@ export default function NotesPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-[var(--cace-navy)]">Student Notes</h1>
-            <InfoTip text="Dated notes for your reference (including ISST-style comments). They do not print on progress reports. Use Print all notes for year-end folders." />
+            <InfoTip text="Dated notes for your reference. Per-student print icon prints notes only. Print all student records prints each student’s full hub (stats + notes) on separate pages for year-end files." />
           </div>
           <p className="text-gray-600">{currentClass.name} • {currentClass.schedule}</p>
           <p className="text-sm text-gray-500 mt-2">
@@ -307,9 +229,9 @@ export default function NotesPage() {
           </p>
         </div>
         {students.length > 0 && (
-          <button type="button" onClick={handlePrintAllNotes} className="btn btn-secondary shrink-0">
+          <button type="button" onClick={handlePrintAllStudentRecords} className="btn btn-secondary shrink-0">
             <PrinterIcon className="w-5 h-5" />
-            Print all notes
+            Print all student records
           </button>
         )}
       </div>

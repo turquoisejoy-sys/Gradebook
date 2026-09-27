@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useApp } from '@/components/AppShell';
 import InfoTip from '@/components/InfoTip';
+import StudentFocusTags from '@/components/StudentFocusTags';
 import { getStudentHubData, type StudentHubData, type AssessmentDetailRow } from '@/lib/student-hub';
+import { printStudentHubRecord } from '@/lib/student-hub-print';
 import { getColorClass, getColorLevel } from '@/lib/calculations';
 import { subscribeSyncStatus } from '@/lib/sync';
 import {
@@ -135,7 +137,7 @@ export default function StudentHubPage() {
           </Link>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-[var(--cace-navy)]">{student.name}</h1>
-            <InfoTip text="All stats, notes, and speaking/writing scores for this student. Use Print progress report to open Report Cards for this student." />
+            <InfoTip text="All stats, notes, and speaking/writing scores for this student. Print student record for their file folder. Print progress report opens the formal Report Cards page." />
           </div>
           <p className="text-gray-600">
             {classData.name} • {classData.schedule}
@@ -156,6 +158,14 @@ export default function StudentHubPage() {
             <PencilSquareIcon className="w-5 h-5" />
             Edit notes
           </Link>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => printStudentHubRecord(classId, studentId)}
+          >
+            <PrinterIcon className="w-5 h-5" />
+            Print student record
+          </button>
           <Link
             href={`/classes/${classId}/report-cards?student=${encodeURIComponent(studentId)}`}
             className="btn btn-primary"
@@ -165,6 +175,8 @@ export default function StudentHubPage() {
           </Link>
         </div>
       </div>
+
+      <StudentFocusTags studentId={studentId} onChange={reload} />
 
       {/* Key stats */}
       <section className="card">

@@ -373,6 +373,22 @@ export default function Dashboard() {
             <Link
               href={
                 currentClassId
+                  ? `/tools/isst-groups?classId=${encodeURIComponent(currentClassId)}`
+                  : '/tools/isst-groups'
+              }
+              className="font-semibold text-[var(--cace-teal)] hover:underline"
+            >
+              ISST groups
+            </Link>
+            <p className="text-sm text-gray-600 mt-1">
+              Form tutoring / skill-clinic groups from focus tags on each student hub. Shows who is
+              untagged so you don&apos;t miss anyone.
+            </p>
+          </li>
+          <li className="card p-4">
+            <Link
+              href={
+                currentClassId
                   ? `/tools/partner-matching?classId=${encodeURIComponent(currentClassId)}`
                   : '/tools/partner-matching'
               }

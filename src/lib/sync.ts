@@ -26,6 +26,7 @@ import {
   Attendance,
   ReportCard,
   StudentNote,
+  SkillTag,
 } from '@/types';
 
 // ============================================
@@ -148,7 +149,16 @@ function isMissingStudentNameColumnError(error: unknown): boolean {
   return msg.includes('PGRST204') && /first_name|last_name/i.test(msg);
 }
 
-function studentToCloudRow(s: Student, includeNameParts: boolean): Record<string, unknown> {
+function isMissingStudentTagIdsColumnError(error: unknown): boolean {
+  const msg = getSyncErrorMessage(error);
+  return msg.includes('PGRST204') && /tag_ids/i.test(msg);
+}
+
+function studentToCloudRow(
+  s: Student,
+  includeNameParts: boolean,
+  includeTagIds: boolean,
+): Record<string, unknown> {
   const row: Record<string, unknown> = {
     id: s.id,
     name: s.name,
@@ -170,11 +180,16 @@ function studentToCloudRow(s: Student, includeNameParts: boolean): Record<string
     row.first_name = s.firstName ?? '';
     row.last_name = s.lastName ?? '';
   }
+  if (includeTagIds) {
+    row.tag_ids = Array.isArray(s.tagIds) ? s.tagIds : [];
+  }
   return row;
 }
 
 function normalizeDownloadedStudent(row: Record<string, unknown>): Student {
   const s = toCamelCase(row) as unknown as Student;
+  const rawTags = (row as { tag_ids?: unknown }).tag_ids ?? (s as { tagIds?: unknown }).tagIds;
+  const tagIds = Array.isArray(rawTags) ? rawTags.map(String).filter(Boolean) : [];
   return {
     ...s,
     firstName: typeof s.firstName === 'string' ? s.firstName : '',
@@ -185,6 +200,7 @@ function normalizeDownloadedStudent(row: Record<string, unknown>): Student {
     casasListeningGain: s.casasListeningGain ?? null,
     casasReadingLevelComplete: s.casasReadingLevelComplete ?? false,
     casasListeningLevelComplete: s.casasListeningLevelComplete ?? false,
+    tagIds,
   };
 }
 
@@ -242,11 +258,20 @@ export async function uploadStudents(students: Student[]): Promise<void> {
   if (!isSupabaseConfigured()) return;
   if (students.length === 0) return;
 
-  let data = students.map(s => studentToCloudRow(s, true));
+  let includeNames = true;
+  let includeTags = true;
+  let data = students.map(s => studentToCloudRow(s, includeNames, includeTags));
   let { error } = await supabase.from('students').upsert(data, { onConflict: 'id' });
 
+  if (error && isMissingStudentTagIdsColumnError(error)) {
+    includeTags = false;
+    data = students.map(s => studentToCloudRow(s, includeNames, includeTags));
+    ({ error } = await supabase.from('students').upsert(data, { onConflict: 'id' }));
+  }
+
   if (error && isMissingStudentNameColumnError(error)) {
-    data = students.map(s => studentToCloudRow(s, false));
+    includeNames = false;
+    data = students.map(s => studentToCloudRow(s, includeNames, includeTags));
     ({ error } = await supabase.from('students').upsert(data, { onConflict: 'id' }));
   }
 
@@ -346,6 +371,21 @@ export async function uploadStudentNotes(notes: StudentNote[]): Promise<void> {
   } catch {
     // Silently fail - table doesn't exist yet
     console.log('student_notes sync skipped');
+  }
+}
+
+export async function uploadSkillTags(tags: SkillTag[]): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  if (tags.length === 0) return;
+
+  try {
+    const data = tags.map(t => toSnakeCase(t as unknown as Record<string, unknown>));
+    const { error } = await supabase.from('skill_tags').upsert(data, { onConflict: 'id' });
+    if (error) {
+      console.log('skill_tags sync skipped (table may not exist):', getSyncErrorMessage(error));
+    }
+  } catch {
+    console.log('skill_tags sync skipped');
   }
 }
 
@@ -505,6 +545,22 @@ export async function downloadStudentNotes(): Promise<StudentNote[]> {
   }
 }
 
+export async function downloadSkillTags(): Promise<SkillTag[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  try {
+    const { data, error } = await supabase.from('skill_tags').select('*');
+    if (error) {
+      console.log('skill_tags download skipped (table may not exist)');
+      return [];
+    }
+    return (data || []).map(row => toCamelCase(row) as unknown as SkillTag);
+  } catch {
+    console.log('skill_tags download skipped');
+    return [];
+  }
+}
+
 export async function downloadSpeakingTests(): Promise<SpeakingTest[]> {
   if (!isSupabaseConfigured()) return [];
 
@@ -607,6 +663,7 @@ export async function uploadAllToCloud(data: {
   attendance: Attendance[];
   reportCards: ReportCard[];
   studentNotes?: StudentNote[];
+  skillTags?: SkillTag[];
   speakingTests?: SpeakingTest[];
   speakingTestResults?: SpeakingTestResult[];
   writingTests?: WritingTest[];
@@ -634,6 +691,7 @@ export async function uploadAllToCloud(data: {
     const validAttendance = data.attendance.filter(a => finalStudentIds.has(a.studentId));
     const validReportCards = data.reportCards.filter(r => finalStudentIds.has(r.studentId));
     const validStudentNotes = (data.studentNotes || []).filter(n => finalStudentIds.has(n.studentId));
+    const validSkillTags = data.skillTags || [];
     const validSpeakingTests = (data.speakingTests || []).filter(t => validClassIds.has(t.classId));
     const validSpeakingTestIds = new Set(validSpeakingTests.map(t => t.id));
     const validSpeakingResults = (data.speakingTestResults || []).filter(
@@ -646,6 +704,7 @@ export async function uploadAllToCloud(data: {
     );
     
     // Upload in order (classes first due to foreign keys)
+    await uploadSkillTags(validSkillTags);
     await uploadClasses(data.classes);
     await uploadStudents(validStudents);
     await uploadCASASTests(validCasasTests);
@@ -692,6 +751,7 @@ export async function downloadAllFromCloud(): Promise<{
   attendance: Attendance[];
   reportCards: ReportCard[];
   studentNotes: StudentNote[];
+  skillTags: SkillTag[];
   speakingTests: SpeakingTest[];
   speakingTestResults: SpeakingTestResult[];
   writingTests: WritingTest[];
@@ -713,6 +773,7 @@ export async function downloadAllFromCloud(): Promise<{
       attendance,
       reportCards,
       studentNotesRaw,
+      skillTags,
       speakingTestsTable,
       speakingTestResultsTable,
       writingTestsTable,
@@ -725,6 +786,7 @@ export async function downloadAllFromCloud(): Promise<{
       downloadAttendance(),
       downloadReportCards(),
       downloadStudentNotes(),
+      downloadSkillTags(),
       downloadSpeakingTests(),
       downloadSpeakingTestResults(),
       downloadWritingTests(),
@@ -754,6 +816,7 @@ export async function downloadAllFromCloud(): Promise<{
       attendance,
       reportCards,
       studentNotes,
+      skillTags,
       speakingTests,
       speakingTestResults,
       writingTests,
@@ -870,6 +933,7 @@ export async function testSupabaseSync(): Promise<SyncTestResult> {
     'attendance',
     'report_cards',
     'student_notes',
+    'skill_tags',
     'speaking_tests',
     'speaking_test_results',
     'writing_tests',
