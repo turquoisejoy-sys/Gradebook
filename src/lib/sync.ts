@@ -263,14 +263,16 @@ export async function uploadStudents(students: Student[]): Promise<void> {
   let data = students.map(s => studentToCloudRow(s, includeNames, includeTags));
   let { error } = await supabase.from('students').upsert(data, { onConflict: 'id' });
 
-  if (error && isMissingStudentTagIdsColumnError(error)) {
-    includeTags = false;
-    data = students.map(s => studentToCloudRow(s, includeNames, includeTags));
-    ({ error } = await supabase.from('students').upsert(data, { onConflict: 'id' }));
-  }
-
-  if (error && isMissingStudentNameColumnError(error)) {
-    includeNames = false;
+  // Supabase reports one missing column at a time, in no fixed order,
+  // so keep dropping optional columns until the upload succeeds.
+  while (error) {
+    if (includeTags && isMissingStudentTagIdsColumnError(error)) {
+      includeTags = false;
+    } else if (includeNames && isMissingStudentNameColumnError(error)) {
+      includeNames = false;
+    } else {
+      break;
+    }
     data = students.map(s => studentToCloudRow(s, includeNames, includeTags));
     ({ error } = await supabase.from('students').upsert(data, { onConflict: 'id' }));
   }
