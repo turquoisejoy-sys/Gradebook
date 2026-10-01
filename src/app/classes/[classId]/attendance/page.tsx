@@ -30,11 +30,18 @@ import {
   UserMinusIcon,
   ExclamationTriangleIcon,
   MinusCircleIcon,
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  PrinterIcon,
+  IdentificationIcon,
 } from '@heroicons/react/24/outline';
 import { StopIcon } from '@heroicons/react/24/solid';
 import Link from 'next/link';
 import StudentQuickNotes from '@/components/StudentQuickNotes';
 import InfoTip from '@/components/InfoTip';
+import StudentRosterModals, { RosterAction } from '@/components/StudentRosterModals';
+import { printAllStudentHubRecords } from '@/lib/student-hub-print';
 
 const ATTENDANCE_IMPORT_TIP =
   'Import one month at a time from your attendance Excel/CSV (.xlsx, .xls, or .csv). Use the monthly report with student names (or First + Last), “Total Hrs_Reg + Bulk in Date Range,” and “Class Scheduled Hrs in Date Range.” After you pick the file, choose which month it is for — the month is not read from the file.';
@@ -88,6 +95,7 @@ export default function AttendancePage() {
   } | null>(null);
   const [editingCell, setEditingCell] = useState<{ studentId: string; month: string } | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [rosterAction, setRosterAction] = useState<RosterAction | null>(null);
   
   // Import review state - 3 steps: select-month -> review-zero -> review-new
   const [importStep, setImportStep] = useState<'select-month' | 'review-zero' | 'review-new'>('select-month');
@@ -550,7 +558,8 @@ export default function AttendancePage() {
             <InfoTip wide text={ATTENDANCE_IMPORT_TIP} label="How to import attendance" />
           </div>
           <p className="text-gray-600">
-            {currentClass.name} • {selectedYear}-{selectedYear + 1}
+            {currentClass.name} • {selectedYear}-{selectedYear + 1} •{' '}
+            <span className="font-medium">{studentAttendance.length} enrolled</span>
           </p>
           {studentAttendance.length > 0 && (() => {
             const validAverages = studentAttendance
@@ -571,7 +580,18 @@ export default function AttendancePage() {
             );
           })()}
         </div>
-        <div className="flex gap-3 items-center">
+        <div className="flex gap-2 items-center flex-wrap justify-end">
+          {studentAttendance.length > 0 && (
+            <button
+              type="button"
+              onClick={() => printAllStudentHubRecords(classId)}
+              className="btn btn-secondary"
+              title="Print each student’s hub record on a separate page for year-end files"
+            >
+              <PrinterIcon className="w-5 h-5" />
+              Print all student records
+            </button>
+          )}
           <input
             type="file"
             ref={fileInputRef}
@@ -585,6 +605,10 @@ export default function AttendancePage() {
           >
             <ArrowUpTrayIcon className="w-5 h-5" />
             Import Month
+          </button>
+          <button onClick={() => setRosterAction({ type: 'add' })} className="btn btn-primary">
+            <PlusIcon className="w-5 h-5" />
+            Add Student
           </button>
         </div>
       </div>
@@ -623,7 +647,7 @@ export default function AttendancePage() {
                   Dropped {importResult.studentsDropped} student{importResult.studentsDropped !== 1 ? 's' : ''}
                 </p>
               )}
-              {importResult.vacationCount && importResult.vacationCount > 0 && (
+              {(importResult.vacationCount ?? 0) > 0 && (
                 <p className="text-purple-700 mt-1">
                   <MinusCircleIcon className="w-4 h-4 inline mr-1" />
                   Marked {importResult.vacationCount} student{importResult.vacationCount !== 1 ? 's' : ''} as on vacation
@@ -647,10 +671,11 @@ export default function AttendancePage() {
       {/* Attendance Table */}
       {studentAttendance.length === 0 ? (
         <div className="card text-center py-12">
-          <p className="text-gray-500 mb-4">No students in this class yet</p>
-          <Link href={`/classes/${classId}/students`} className="btn btn-accent">
-            Add Students
-          </Link>
+          <p className="text-gray-500">No students in this class yet</p>
+          <p className="text-sm text-gray-400 mt-2">
+            Click <strong>Import Month</strong> to add students from your attendance file (recommended), or{' '}
+            <strong>Add Student</strong> to type one in.
+          </p>
         </div>
       ) : (
         <div className="card p-0 overflow-x-auto">
@@ -668,11 +693,38 @@ export default function AttendancePage() {
               {studentAttendance.map(({ student, monthlyData, average }) => (
                 <tr key={student.id}>
                   <td className="sticky left-0 bg-white font-medium z-10">
-                    <StudentQuickNotes
-                      classId={classId}
-                      studentId={student.id}
-                      studentName={student.name}
-                    />
+                    <div className="group/name flex items-center gap-1">
+                      <StudentQuickNotes
+                        classId={classId}
+                        studentId={student.id}
+                        studentName={student.name}
+                      />
+                      <div className="flex items-center opacity-40 group-hover/name:opacity-100 transition-opacity">
+                        <Link
+                          href={`/classes/${classId}/students/${student.id}`}
+                          className="p-1 text-gray-400 hover:text-[var(--cace-teal)] rounded"
+                          title="Open student hub"
+                        >
+                          <IdentificationIcon className="w-4 h-4" />
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => setRosterAction({ type: 'edit', student })}
+                          className="p-1 text-gray-400 hover:text-[var(--cace-teal)] rounded"
+                          title="Edit name, enrollment date, notes"
+                        >
+                          <PencilIcon className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRosterAction({ type: 'leave', student })}
+                          className="p-1 text-gray-400 hover:text-red-500 rounded"
+                          title="Leave class — promote, transfer, or drop"
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                   </td>
                   {MONTHS.map(({ key }) => {
                     const monthKey = getMonthKey(key);
@@ -775,6 +827,13 @@ export default function AttendancePage() {
           <span>Vacation (excluded from avg)</span>
         </div>
       </div>
+
+      <StudentRosterModals
+        classId={classId}
+        action={rosterAction}
+        onClose={() => setRosterAction(null)}
+        onChanged={refreshData}
+      />
 
       {/* Import Month Modal */}
       {showImportModal && (
