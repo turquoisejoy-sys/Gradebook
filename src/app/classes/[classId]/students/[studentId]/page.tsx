@@ -113,8 +113,8 @@ export default function StudentHubPage() {
       <div className="max-w-4xl mx-auto">
         <div className="card text-center py-12">
           <p className="text-gray-500">Student not found in this class</p>
-          <Link href={`/classes/${classId}/students`} className="btn btn-primary mt-4">
-            Back to Students
+          <Link href={`/classes/${classId}/attendance`} className="btn btn-primary mt-4">
+            Back to Attendance
           </Link>
         </div>
       </div>
@@ -129,11 +129,11 @@ export default function StudentHubPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link
-            href={`/classes/${classId}/students`}
+            href={`/classes/${classId}/attendance`}
             className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-[var(--cace-teal)] mb-2"
           >
             <ArrowLeftIcon className="w-4 h-4" />
-            Students
+            Attendance
           </Link>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-[var(--cace-navy)]">{student.name}</h1>
