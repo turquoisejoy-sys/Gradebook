@@ -154,6 +154,16 @@ function isMissingStudentTagIdsColumnError(error: unknown): boolean {
   return msg.includes('PGRST204') && /tag_ids/i.test(msg);
 }
 
+function isMissingStudentGoalColumnError(error: unknown): boolean {
+  const msg = getSyncErrorMessage(error);
+  return msg.includes('PGRST204') && /'goal'/i.test(msg);
+}
+
+function isMissingClassIsstColumnError(error: unknown): boolean {
+  const msg = getSyncErrorMessage(error);
+  return msg.includes('PGRST204') && /isst_groups/i.test(msg);
+}
+
 function isMissingAttendanceHoursColumnError(error: unknown): boolean {
   const msg = getSyncErrorMessage(error);
   return msg.includes('PGRST204') && /hours_attended|scheduled_hours|daily_hours/i.test(msg);
@@ -163,6 +173,7 @@ function studentToCloudRow(
   s: Student,
   includeNameParts: boolean,
   includeTagIds: boolean,
+  includeGoal: boolean,
 ): Record<string, unknown> {
   const row: Record<string, unknown> = {
     id: s.id,
@@ -188,6 +199,9 @@ function studentToCloudRow(
   if (includeTagIds) {
     row.tag_ids = Array.isArray(s.tagIds) ? s.tagIds : [];
   }
+  if (includeGoal) {
+    row.goal = s.goal ?? '';
+  }
   return row;
 }
 
@@ -199,6 +213,8 @@ function normalizeDownloadedStudent(row: Record<string, unknown>): Student {
     ...s,
     firstName: typeof s.firstName === 'string' ? s.firstName : '',
     lastName: typeof s.lastName === 'string' ? s.lastName : '',
+    // Left undefined when the cloud has no goal column, so a local goal is not overwritten
+    goal: typeof s.goal === 'string' ? s.goal : undefined,
     isPromoted: s.isPromoted ?? false,
     promotedDate: s.promotedDate ?? null,
     casasReadingGain: s.casasReadingGain ?? null,
@@ -248,12 +264,24 @@ export async function uploadClasses(classes: Class[]): Promise<void> {
   if (!isSupabaseConfigured()) return;
   if (classes.length === 0) return;
   
-  const data = classes.map(c => toSnakeCase(c as unknown as Record<string, unknown>));
-  
-  const { error } = await supabase
+  const toRow = (c: Class, includeIsst: boolean) => {
+    const row = toSnakeCase(c as unknown as Record<string, unknown>);
+    if (includeIsst) row.isst_groups = c.isstGroups ?? null;
+    else delete row.isst_groups;
+    return row;
+  };
+
+  let { error } = await supabase
     .from('classes')
-    .upsert(data, { onConflict: 'id' });
-  
+    .upsert(classes.map(c => toRow(c, true)), { onConflict: 'id' });
+
+  // isst_groups comes from a later migration; upload without it until that is run.
+  if (error && isMissingClassIsstColumnError(error)) {
+    ({ error } = await supabase
+      .from('classes')
+      .upsert(classes.map(c => toRow(c, false)), { onConflict: 'id' }));
+  }
+
   if (error) {
     throwSyncError('Classes upload error', error);
   }
@@ -265,7 +293,9 @@ export async function uploadStudents(students: Student[]): Promise<void> {
 
   let includeNames = true;
   let includeTags = true;
-  let data = students.map(s => studentToCloudRow(s, includeNames, includeTags));
+  let includeGoal = true;
+  const toRows = () => students.map(s => studentToCloudRow(s, includeNames, includeTags, includeGoal));
+  let data = toRows();
   let { error } = await supabase.from('students').upsert(data, { onConflict: 'id' });
 
   // Supabase reports one missing column at a time, in no fixed order,
@@ -275,10 +305,12 @@ export async function uploadStudents(students: Student[]): Promise<void> {
       includeTags = false;
     } else if (includeNames && isMissingStudentNameColumnError(error)) {
       includeNames = false;
+    } else if (includeGoal && isMissingStudentGoalColumnError(error)) {
+      includeGoal = false;
     } else {
       break;
     }
-    data = students.map(s => studentToCloudRow(s, includeNames, includeTags));
+    data = toRows();
     ({ error } = await supabase.from('students').upsert(data, { onConflict: 'id' }));
   }
 

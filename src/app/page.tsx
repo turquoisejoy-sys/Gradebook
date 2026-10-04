@@ -381,8 +381,8 @@ export default function Dashboard() {
               ISST groups
             </Link>
             <p className="text-sm text-gray-600 mt-1">
-              Form tutoring / skill-clinic groups from focus tags on each student hub. Shows who is
-              untagged so you don&apos;t miss anyone.
+              Speaking and Writing groups (max 5 or 6) from each student&apos;s focus areas, plus the
+              1-1 Support list. Drag students between groups.
             </p>
           </li>
           <li className="card p-4">
