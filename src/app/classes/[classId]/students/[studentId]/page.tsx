@@ -176,6 +176,40 @@ export default function StudentHubPage() {
         </div>
       </div>
 
+      {/* Notes */}
+      <section className="card">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-[var(--cace-navy)]">Notes</h2>
+            <InfoTip text="Dated teacher notes for this student. ISST-style comments live here too. Edit on the Notes page." />
+          </div>
+          <Link
+            href={`/classes/${classId}/notes#student-${studentId}`}
+            className="text-sm text-[var(--cace-teal)] hover:underline"
+          >
+            Manage notes
+          </Link>
+        </div>
+        {personalNotes && (
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm">
+            <p className="text-xs font-medium text-gray-500 mb-1">Roster / personal note</p>
+            <p className="whitespace-pre-wrap text-gray-700">{personalNotes}</p>
+          </div>
+        )}
+        {notes.length === 0 ? (
+          <p className="text-sm text-gray-400">No dated notes yet</p>
+        ) : (
+          <ul className="space-y-3">
+            {notes.map(n => (
+              <li key={n.id} className="border-b border-gray-100 last:border-0 pb-3 last:pb-0">
+                <span className="text-xs text-gray-500">{n.date}</span>
+                <p className="mt-0.5 text-sm text-gray-800 whitespace-pre-wrap">{n.content}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <StudentFocusTags studentId={studentId} onChange={reload} />
 
       {/* Key stats */}
@@ -280,40 +314,6 @@ export default function StudentHubPage() {
 
       <AssessmentSection title="Speaking" average={student.speakingAverage} rows={data.speakingRows} />
       <AssessmentSection title="Writing" average={student.writingAverage} rows={data.writingRows} />
-
-      {/* Notes */}
-      <section className="card">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-[var(--cace-navy)]">Notes</h2>
-            <InfoTip text="Dated teacher notes for this student. ISST-style comments live here too. Edit on the Notes page." />
-          </div>
-          <Link
-            href={`/classes/${classId}/notes#student-${studentId}`}
-            className="text-sm text-[var(--cace-teal)] hover:underline"
-          >
-            Manage notes
-          </Link>
-        </div>
-        {personalNotes && (
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm">
-            <p className="text-xs font-medium text-gray-500 mb-1">Roster / personal note</p>
-            <p className="whitespace-pre-wrap text-gray-700">{personalNotes}</p>
-          </div>
-        )}
-        {notes.length === 0 ? (
-          <p className="text-sm text-gray-400">No dated notes yet</p>
-        ) : (
-          <ul className="space-y-3">
-            {notes.map(n => (
-              <li key={n.id} className="border-b border-gray-100 last:border-0 pb-3 last:pb-0">
-                <span className="text-xs text-gray-500">{n.date}</span>
-                <p className="mt-0.5 text-sm text-gray-800 whitespace-pre-wrap">{n.content}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
 
       {/* Saved report cards */}
       <section className="card">
