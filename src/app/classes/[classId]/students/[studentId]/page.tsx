@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useApp } from '@/components/AppShell';
 import InfoTip from '@/components/InfoTip';
 import StudentFocusTags from '@/components/StudentFocusTags';
+import StudentHubNotes from '@/components/StudentHubNotes';
 import { getStudentHubData, type StudentHubData, type AssessmentDetailRow } from '@/lib/student-hub';
 import { printStudentHubRecord } from '@/lib/student-hub-print';
 import { getColorClass, getColorLevel } from '@/lib/calculations';
@@ -13,7 +14,6 @@ import { subscribeSyncStatus } from '@/lib/sync';
 import {
   ArrowLeftIcon,
   DocumentTextIcon,
-  PencilSquareIcon,
   PrinterIcon,
 } from '@heroicons/react/24/outline';
 
@@ -137,7 +137,7 @@ export default function StudentHubPage() {
           </Link>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-[var(--cace-navy)]">{student.name}</h1>
-            <InfoTip text="All stats, notes, and speaking/writing scores for this student. Print student record for their file folder. Print progress report opens the formal Report Cards page." />
+            <InfoTip text="All stats, notes, and speaking/writing scores for this student. Add or edit notes right here. Print student record for their file folder. Print progress report opens the formal Report Cards page." />
           </div>
           <p className="text-gray-600">
             {classData.name} • {classData.schedule}
@@ -151,13 +151,6 @@ export default function StudentHubPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 print:hidden">
-          <Link
-            href={`/classes/${classId}/notes#student-${studentId}`}
-            className="btn btn-secondary"
-          >
-            <PencilSquareIcon className="w-5 h-5" />
-            Edit notes
-          </Link>
           <button
             type="button"
             className="btn btn-secondary"
@@ -175,6 +168,14 @@ export default function StudentHubPage() {
           </Link>
         </div>
       </div>
+
+      <StudentHubNotes
+        classId={classId}
+        studentId={studentId}
+        notes={notes}
+        personalNotes={personalNotes}
+        onChange={reload}
+      />
 
       <StudentFocusTags studentId={studentId} onChange={reload} />
 
@@ -280,40 +281,6 @@ export default function StudentHubPage() {
 
       <AssessmentSection title="Speaking" average={student.speakingAverage} rows={data.speakingRows} />
       <AssessmentSection title="Writing" average={student.writingAverage} rows={data.writingRows} />
-
-      {/* Notes */}
-      <section className="card">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-[var(--cace-navy)]">Notes</h2>
-            <InfoTip text="Dated teacher notes for this student. ISST-style comments live here too. Edit on the Notes page." />
-          </div>
-          <Link
-            href={`/classes/${classId}/notes#student-${studentId}`}
-            className="text-sm text-[var(--cace-teal)] hover:underline"
-          >
-            Manage notes
-          </Link>
-        </div>
-        {personalNotes && (
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm">
-            <p className="text-xs font-medium text-gray-500 mb-1">Roster / personal note</p>
-            <p className="whitespace-pre-wrap text-gray-700">{personalNotes}</p>
-          </div>
-        )}
-        {notes.length === 0 ? (
-          <p className="text-sm text-gray-400">No dated notes yet</p>
-        ) : (
-          <ul className="space-y-3">
-            {notes.map(n => (
-              <li key={n.id} className="border-b border-gray-100 last:border-0 pb-3 last:pb-0">
-                <span className="text-xs text-gray-500">{n.date}</span>
-                <p className="mt-0.5 text-sm text-gray-800 whitespace-pre-wrap">{n.content}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
 
       {/* Saved report cards */}
       <section className="card">
