@@ -7,6 +7,7 @@ import { useApp } from '@/components/AppShell';
 import InfoTip from '@/components/InfoTip';
 import StudentFocusTags from '@/components/StudentFocusTags';
 import StudentHubNotes from '@/components/StudentHubNotes';
+import StudentHubGoal from '@/components/StudentHubGoal';
 import { getStudentHubData, type StudentHubData, type AssessmentDetailRow } from '@/lib/student-hub';
 import { printStudentHubRecord } from '@/lib/student-hub-print';
 import { getColorClass, getColorLevel } from '@/lib/calculations';
@@ -176,6 +177,8 @@ export default function StudentHubPage() {
         personalNotes={personalNotes}
         onChange={reload}
       />
+
+      <StudentHubGoal studentId={studentId} goal={student.goal ?? ''} onChange={reload} />
 
       <StudentFocusTags studentId={studentId} onChange={reload} />
 

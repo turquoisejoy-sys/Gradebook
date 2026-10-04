@@ -191,6 +191,11 @@ export function buildStudentHubRecordInnerHtml(data: StudentHubData): string {
       ${personalBlock}
       ${notesHtml}
     </section>
+
+    <section class="block">
+      <h2>Student goal</h2>
+      ${student.goal?.trim() ? `<p class="pre">${escapeHtml(student.goal.trim())}</p>` : '<p class="muted">No goal written</p>'}
+    </section>
   `;
 }
 

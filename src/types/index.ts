@@ -66,6 +66,8 @@ export interface Student {
   classId: string;
   enrollmentDate: string; // ISO date string
   notes: string;          // Personal notes (not for report cards)
+  /** Student goal, written on the student hub. */
+  goal?: string;
   isDropped: boolean;
   droppedDate: string | null;
   /** Left class successfully (e.g. promoted to next level) — excluded from active roster and retention */

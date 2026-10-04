@@ -249,6 +249,9 @@ export async function syncFromCloud(): Promise<boolean> {
             name: buildStudentDisplayName(localStudent.firstName!, localStudent.lastName!),
           };
         }
+        if (student.goal === undefined && localStudent.goal) {
+          next = { ...next, goal: localStudent.goal };
+        }
         const cloudTags = Array.isArray(student.tagIds) ? student.tagIds : [];
         const localTags = Array.isArray(localStudent.tagIds) ? localStudent.tagIds : [];
         if (cloudTags.length === 0 && localTags.length > 0) {
