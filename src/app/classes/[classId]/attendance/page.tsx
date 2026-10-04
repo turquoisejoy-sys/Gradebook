@@ -354,8 +354,9 @@ export default function AttendancePage() {
       // No zero attendance, but has new/missing students
       setImportStep('review-new');
     } else {
-      // Nothing to review - go straight to import
-      handleConfirmImport();
+      // Nothing to review. Pass the rows directly — setState has not flushed yet,
+      // so reading parsedRecords here would import an empty list.
+      handleConfirmImport(filteredRecords);
     }
   };
   
@@ -371,8 +372,9 @@ export default function AttendancePage() {
     }
   };
 
-  const handleConfirmImport = () => {
+  const handleConfirmImport = (recordsOverride?: AttendanceImportRow[]) => {
     if (!currentClass) return;
+    const recordsToImport = recordsOverride ?? parsedRecords;
     
     setIsImporting(true);
     
@@ -463,13 +465,13 @@ export default function AttendancePage() {
     }
     
     // Sync first/last names from file for all matched roster students
-    const nameRepair = repairStudentNamesFromAttendanceRecords(classId, parsedRecords);
+    const nameRepair = repairStudentNamesFromAttendanceRecords(classId, recordsToImport);
     namesRepaired = nameRepair.updated.length;
 
     // Now import attendance for all students in the file
     let added = 0;
     let vacationCount = 0;
-    for (const record of parsedRecords) {
+    for (const record of recordsToImport) {
       const normalizedName = record.studentName.trim().toLowerCase();
       const zeroAction = zeroAttendanceActions.get(normalizedName);
       
@@ -1200,7 +1202,7 @@ export default function AttendancePage() {
                     Back
                   </button>
                   <button
-                    onClick={handleConfirmImport}
+                    onClick={() => handleConfirmImport()}
                     disabled={isImporting}
                     className="btn btn-primary flex-1 disabled:opacity-50"
                   >
