@@ -20,7 +20,12 @@ import {
   updateStudent,
 } from '@/lib/storage';
 import { parseAttendanceFileFromInput, calculateAttendancePercentage } from '@/lib/parsers';
-import { calculateAttendanceAverage, getColorLevel, compareStudentsByLastName } from '@/lib/calculations';
+import {
+  calculateAttendanceAverage,
+  getColorLevel,
+  compareStudentsByLastName,
+  attendancePercentForEnrollment,
+} from '@/lib/calculations';
 import { buildStudentDisplayName, matchAttendanceRecordToStudent } from '@/lib/student-names';
 import { Student, Class, Attendance, AttendanceImportRow } from '@/types';
 import {
@@ -482,14 +487,22 @@ export default function AttendancePage() {
       
       const student = findStudentByName(record.studentName, classId, true);
       if (student && !student.isPromoted) {
-        const percentage = calculateAttendancePercentage(record.totalHours, record.scheduledHours);
+        // Keep the hours so the % can be recalculated if the enrollment date is changed later
+        const hours = {
+          hoursAttended: record.totalHours,
+          scheduledHours: record.reportScheduledHours ?? record.scheduledHours,
+          dailyHours: record.dailyHours,
+        };
+        const percentage =
+          attendancePercentForEnrollment(hours, student.enrollmentDate) ??
+          calculateAttendancePercentage(record.totalHours, record.scheduledHours);
         
         // Mark as vacation if that action was selected
         if (percentage === 0 && zeroAction === 'vacation') {
-          setAttendance(student.id, importMonth, 0, true); // isVacation = true
+          setAttendance(student.id, importMonth, 0, true, hours); // isVacation = true
           vacationCount++;
         } else {
-          setAttendance(student.id, importMonth, percentage, false);
+          setAttendance(student.id, importMonth, percentage, false, hours);
         }
         added++;
       }

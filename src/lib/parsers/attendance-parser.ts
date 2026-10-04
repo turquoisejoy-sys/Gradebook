@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { AttendanceImportRow } from '@/types';
+import { AttendanceDayHours, AttendanceImportRow } from '@/types';
 
 /**
  * Attendance File Parser
@@ -249,6 +249,25 @@ function headerToIsoDate(headerCell: string): string | undefined {
   return undefined;
 }
 
+/** Class hours and this student's hours for each dated column in the per-day grid. */
+function dailyHoursFromGrid(
+  row: unknown[],
+  dateRange: { start: number; end: number },
+  headers: string[],
+  dayCaps: number[],
+): Record<string, AttendanceDayHours> | undefined {
+  const days: Record<string, AttendanceDayHours> = {};
+  for (let j = dateRange.start; j <= dateRange.end; j++) {
+    const date = headerToIsoDate(String(headers[j] ?? ''));
+    if (!date) continue;
+    days[date] = {
+      classHours: dayCaps[j - dateRange.start] ?? 0,
+      studentHours: parseDailyHours(row[j]) ?? 0,
+    };
+  }
+  return Object.keys(days).length > 0 ? days : undefined;
+}
+
 /** First class session date for this row (from per-day grid headers). */
 function firstAttendanceDateFromGrid(
   row: unknown[],
@@ -425,6 +444,7 @@ export function parseAttendanceFile(
       }
 
       let scheduledHours = parseNumber(row[scheduledHoursCol]);
+      const reportScheduledHours = scheduledHours;
 
       const normalizedName = studentName.trim().toLowerCase();
       // Derived denominator only for students not on the roster yet (new this import)
@@ -469,6 +489,8 @@ export function parseAttendanceFile(
         dateRange && dayCaps
           ? firstAttendanceDateFromGrid(row, dateRange, headers)
           : undefined;
+      const dailyHours =
+        dateRange && dayCaps ? dailyHoursFromGrid(row, dateRange, headers, dayCaps) : undefined;
 
       const importRow: AttendanceImportRow = {
         studentName,
@@ -478,6 +500,8 @@ export function parseAttendanceFile(
         scheduledHours,
         ...(status ? { status } : {}),
         ...(suggestedEnrollmentDate ? { suggestedEnrollmentDate } : {}),
+        ...(reportScheduledHours !== null ? { reportScheduledHours } : {}),
+        ...(dailyHours ? { dailyHours } : {}),
       };
       
       result.records.push(importRow);

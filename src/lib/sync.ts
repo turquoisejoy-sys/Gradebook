@@ -154,6 +154,11 @@ function isMissingStudentTagIdsColumnError(error: unknown): boolean {
   return msg.includes('PGRST204') && /tag_ids/i.test(msg);
 }
 
+function isMissingAttendanceHoursColumnError(error: unknown): boolean {
+  const msg = getSyncErrorMessage(error);
+  return msg.includes('PGRST204') && /hours_attended|scheduled_hours|daily_hours/i.test(msg);
+}
+
 function studentToCloudRow(
   s: Student,
   includeNameParts: boolean,
@@ -316,12 +321,27 @@ export async function uploadAttendance(attendance: Attendance[]): Promise<void> 
   if (!isSupabaseConfigured()) return;
   if (attendance.length === 0) return;
   
-  const data = attendance.map(a => toSnakeCase(a as unknown as Record<string, unknown>));
-  
-  const { error } = await supabase
+  const toRow = (a: Attendance, includeHours: boolean) => {
+    const row = toSnakeCase(a as unknown as Record<string, unknown>);
+    if (!includeHours) {
+      delete row.hours_attended;
+      delete row.scheduled_hours;
+      delete row.daily_hours;
+    }
+    return row;
+  };
+
+  let { error } = await supabase
     .from('attendance')
-    .upsert(data, { onConflict: 'id' });
-  
+    .upsert(attendance.map(a => toRow(a, true)), { onConflict: 'id' });
+
+  // Hours columns come from a later migration; upload percentages only until it is run.
+  if (error && isMissingAttendanceHoursColumnError(error)) {
+    ({ error } = await supabase
+      .from('attendance')
+      .upsert(attendance.map(a => toRow(a, false)), { onConflict: 'id' }));
+  }
+
   if (error) {
     throwSyncError('Attendance upload error', error);
   }

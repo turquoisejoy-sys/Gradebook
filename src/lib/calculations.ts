@@ -110,6 +110,48 @@ export function calculateAttendanceAverage(attendance: Attendance[]): number | n
   return nonVacation.reduce((sum, a) => sum + a.percentage, 0) / nonVacation.length;
 }
 
+export interface AttendanceHours {
+  hoursAttended?: number | null;
+  scheduledHours?: number | null;
+  dailyHours?: Attendance['dailyHours'];
+}
+
+/**
+ * Monthly attendance % from imported hours, counting only class days from the
+ * student's start onward. The start is the enrollment date, or the first day
+ * they attended if that is earlier. When the start is on or before the
+ * month's first class day, the report's own totals are used unchanged.
+ * Returns null when the record has no imported hours (e.g. typed in by hand).
+ */
+export function attendancePercentForEnrollment(
+  hours: AttendanceHours,
+  enrollmentDate: string,
+): number | null {
+  const { hoursAttended, scheduledHours, dailyHours } = hours;
+  if (hoursAttended == null || !scheduledHours) return null;
+  const toPercent = (attended: number, possible: number) =>
+    Math.round((attended / possible) * 100 * 10) / 10;
+
+  const dates = dailyHours ? Object.keys(dailyHours).sort() : [];
+  if (!dailyHours || dates.length === 0) return toPercent(hoursAttended, scheduledHours);
+
+  const firstAttended = dates.find(d => dailyHours[d].studentHours > 0);
+  let start = enrollmentDate || dates[0];
+  if (firstAttended && firstAttended < start) start = firstAttended;
+  if (start <= dates[0]) return toPercent(hoursAttended, scheduledHours);
+
+  let possible = 0;
+  let attended = 0;
+  for (const d of dates) {
+    if (d < start) continue;
+    possible += dailyHours[d].classHours;
+    attended += dailyHours[d].studentHours;
+  }
+  // Enrolled after the last class day of this month: nothing to measure against
+  if (possible <= 0) return toPercent(hoursAttended, scheduledHours);
+  return toPercent(attended, possible);
+}
+
 function calculateAssessmentAveragePercentByStudent(
   studentId: string,
   tests: { id: string; totalPoints: number }[],
