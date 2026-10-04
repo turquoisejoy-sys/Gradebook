@@ -402,7 +402,7 @@ export default function SpeakingPage() {
           {students.length === 0 ? (
             <div className="card text-center py-12">
               <p className="text-gray-500 mb-4">No students in this class yet</p>
-              <Link href={`/classes/${classId}/students`} className="btn btn-accent">
+              <Link href={`/classes/${classId}/attendance`} className="btn btn-accent">
                 Add students
               </Link>
             </div>

@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   HomeIcon,
-  UserGroupIcon,
   AcademicCapIcon,
   CalendarDaysIcon,
   ClipboardDocumentListIcon,
@@ -56,9 +55,8 @@ export default function Sidebar({
   ];
 
   const classLinks = currentClassId ? [
-    { href: `${classBasePath}/students`, label: 'Students', icon: UserGroupIcon },
-    { href: `${classBasePath}/notes`, label: 'Notes', icon: PencilSquareIcon },
     { href: `${classBasePath}/attendance`, label: 'Attendance', icon: CalendarDaysIcon },
+    { href: `${classBasePath}/notes`, label: 'Notes', icon: PencilSquareIcon },
     { href: `${classBasePath}/casas-reading`, label: 'CASAS Reading', icon: AcademicCapIcon },
     { href: `${classBasePath}/casas-listening`, label: 'CASAS Listening', icon: AcademicCapIcon },
     { href: `${classBasePath}/tests`, label: 'Unit Tests', icon: ClipboardDocumentListIcon },
@@ -90,12 +88,12 @@ export default function Sidebar({
       const currentSection = pathParts.slice(2).join('/');
       const nextPath = currentSection
         ? `/classes/${nextClassId}/${currentSection}`
-        : `/classes/${nextClassId}/students`;
+        : `/classes/${nextClassId}/attendance`;
       router.push(nextPath);
       return;
     }
 
-    router.push(`/classes/${nextClassId}/students`);
+    router.push(`/classes/${nextClassId}/attendance`);
   };
 
   // Sync status indicator

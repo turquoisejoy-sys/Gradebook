@@ -482,7 +482,7 @@ export default function CASASListeningPage() {
       {studentsWithTests.length === 0 ? (
         <div className="card text-center py-12">
           <p className="text-gray-500 mb-4">No students in this class yet</p>
-          <Link href={`/classes/${classId}/students`} className="btn btn-accent">Add Students</Link>
+          <Link href={`/classes/${classId}/attendance`} className="btn btn-accent">Add Students</Link>
         </div>
       ) : (
         <div className="card p-0 overflow-x-auto">
