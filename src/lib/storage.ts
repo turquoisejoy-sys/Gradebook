@@ -264,7 +264,12 @@ export async function syncFromCloud(): Promise<boolean> {
     }
     
     // Merge all data (use filtered cloud so deleted classes/students don't come back)
-    const mergedClasses = withoutDeletedClasses(mergeArrays(localClasses, cloudClassesFiltered));
+    const mergedClasses = withoutDeletedClasses(mergeArrays(localClasses, cloudClassesFiltered)).map(cls => {
+      // Cloud without the isst_groups column must not wipe groups saved in this browser
+      if (cls.isstGroups !== undefined) return cls;
+      const local = localClasses.find(c => c.id === cls.id);
+      return local?.isstGroups ? { ...cls, isstGroups: local.isstGroups } : cls;
+    });
     const mergedStudents = withoutDeletedStudents(mergeStudents(localStudents, cloudStudentsFiltered));
     const mergedCasasTests = mergeArrays(localCasasTests, cloudCasasFiltered);
     const mergedUnitTests = mergeArrays(localUnitTests, cloudUnitTestsFiltered);

@@ -159,6 +159,11 @@ function isMissingStudentGoalColumnError(error: unknown): boolean {
   return msg.includes('PGRST204') && /'goal'/i.test(msg);
 }
 
+function isMissingClassIsstColumnError(error: unknown): boolean {
+  const msg = getSyncErrorMessage(error);
+  return msg.includes('PGRST204') && /isst_groups/i.test(msg);
+}
+
 function isMissingAttendanceHoursColumnError(error: unknown): boolean {
   const msg = getSyncErrorMessage(error);
   return msg.includes('PGRST204') && /hours_attended|scheduled_hours|daily_hours/i.test(msg);
@@ -259,12 +264,24 @@ export async function uploadClasses(classes: Class[]): Promise<void> {
   if (!isSupabaseConfigured()) return;
   if (classes.length === 0) return;
   
-  const data = classes.map(c => toSnakeCase(c as unknown as Record<string, unknown>));
-  
-  const { error } = await supabase
+  const toRow = (c: Class, includeIsst: boolean) => {
+    const row = toSnakeCase(c as unknown as Record<string, unknown>);
+    if (includeIsst) row.isst_groups = c.isstGroups ?? null;
+    else delete row.isst_groups;
+    return row;
+  };
+
+  let { error } = await supabase
     .from('classes')
-    .upsert(data, { onConflict: 'id' });
-  
+    .upsert(classes.map(c => toRow(c, true)), { onConflict: 'id' });
+
+  // isst_groups comes from a later migration; upload without it until that is run.
+  if (error && isMissingClassIsstColumnError(error)) {
+    ({ error } = await supabase
+      .from('classes')
+      .upsert(classes.map(c => toRow(c, false)), { onConflict: 'id' }));
+  }
+
   if (error) {
     throwSyncError('Classes upload error', error);
   }

@@ -19,6 +19,17 @@ export const CACE_LEVELS: Record<CACELevel, {
 };
 
 // Class (Morning, Evening, etc.)
+export type IsstSkill = 'speaking' | 'writing';
+
+/** Saved ISST sub-groups for one class: lists of student ids per group, per skill. */
+export interface IsstGroups {
+  /** Max students per group (5 or 6). */
+  groupSize: number;
+  /** null until "Build groups" has been clicked for that skill. */
+  speaking: string[][] | null;
+  writing: string[][] | null;
+}
+
 export interface Class {
   id: string;
   name: string;
@@ -36,6 +47,8 @@ export interface Class {
   colorThresholds: ColorThresholds;
   /** Last successful "Student Gains" import for this class (YYYY-MM-DD) */
   casasGainsImportedAt: string | null;
+  /** Saved ISST sub-groups (null/undefined until built). */
+  isstGroups?: IsstGroups | null;
   createdAt: string;
   updatedAt: string;
 }
