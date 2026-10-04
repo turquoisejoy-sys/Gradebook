@@ -197,6 +197,10 @@ export default function AttendancePage() {
     const file = e.target.files?.[0];
     if (file) {
       setImportFile(file);
+      setImportResult(null);
+      setParseErrors([]);
+      setImportStep('select-month');
+      setImportMonth('');
       setShowImportModal(true);
     }
     if (fileInputRef.current) {
@@ -204,119 +208,148 @@ export default function AttendancePage() {
     }
   };
 
+  type ImportSnapshot = {
+    records: AttendanceImportRow[];
+    errors: string[];
+    newStudents: {
+      name: string;
+      firstName?: string;
+      lastName?: string;
+      selected: boolean;
+      enrollDate: string;
+      reactivateStudentId?: string;
+      returningLabel?: string;
+    }[];
+    missingStudents: { student: Student; selected: boolean }[];
+    zeroAttendanceStudents: {
+      name: string;
+      action: 'record' | 'vacation' | 'drop' | 'ignore';
+      studentId?: string;
+      enrollDate?: string;
+    }[];
+  };
+
   const handleAnalyzeImport = async () => {
     if (!importFile || !importMonth || !currentClass) return;
 
     setIsImporting(true);
-    const rosterNames = new Set(
-      getStudentsByClass(classId, true).map((s) => s.name.trim().toLowerCase()),
-    );
-    const result = await parseAttendanceFileFromInput(importFile, {
-      rosterNormalizedNames: rosterNames,
-    });
+    setParseErrors([]);
 
-    // Auto-ignore: DROPPED + zero hours — don't ask about them, don't import
-    const isDroppedZero = (r: AttendanceImportRow) => {
-      const pct = calculateAttendancePercentage(r.totalHours, r.scheduledHours);
-      const dropped = r.status && /dropped/i.test(r.status);
-      return pct === 0 && dropped;
-    };
-
-    const currentStudents = getStudentsByClass(classId, true);
-    const isRecordOnRoster = (record: AttendanceImportRow) =>
-      currentStudents.some(s => matchAttendanceRecordToStudent(record, s));
-    
-    // Check if this is a first-time import (empty active roster)
-    const isFirstImport = getStudentsByClass(classId).length === 0;
-    
-    // Pre-calculate which students have zero attendance (excluding auto-ignored dropped+zero)
-    const zeroAttendanceNames = new Set<string>();
-    for (const record of result.records) {
-      if (isDroppedZero(record)) continue;
-      const percentage = calculateAttendancePercentage(record.totalHours, record.scheduledHours);
-      if (percentage === 0) {
-        zeroAttendanceNames.add(record.studentName.trim().toLowerCase());
-      }
-    }
-    
-    // Find new students (in file but not in roster) WHO HAVE ACTUAL ATTENDANCE
-    // New students with 0% attendance will be shown in the zero attendance step instead
-    // Auto-ignored (DROPPED + zero) are never added
-    const newStudentNames: AttendanceImportRow[] = [];
-    let skippedZeroAttendance = 0;
-    for (const record of result.records) {
-      if (isDroppedZero(record)) continue;
-      const normalizedName = record.studentName.trim().toLowerCase();
-      if (!isRecordOnRoster(record)) {
-        // On first import, silently skip students with 0% attendance
-        if (isFirstImport && zeroAttendanceNames.has(normalizedName)) {
-          skippedZeroAttendance++;
-          continue;
-        }
-        // New students with 0% go to zero attendance step, not here
-        if (zeroAttendanceNames.has(normalizedName)) {
-          continue;
-        }
-        newStudentNames.push(record);
-      }
-    }
-    
-    // Find missing students (in roster but not in file)
-    const missingStudentsList: Student[] = [];
-    for (const student of getStudentsByClass(classId)) {
-      const inFile = result.records.some(
-        r => !isDroppedZero(r) && matchAttendanceRecordToStudent(r, student),
+    try {
+      const rosterNames = new Set(
+        getStudentsByClass(classId, true).map((s) => s.name.trim().toLowerCase()),
       );
-      if (!inFile) {
-        missingStudentsList.push(student);
-      }
-    }
-    
-    // Find students with zero attendance — exclude auto-ignored (DROPPED + zero)
-    const zeroAttendanceList: { name: string; studentId?: string }[] = [];
-    for (const record of result.records) {
-      if (isDroppedZero(record)) continue;
-      const percentage = calculateAttendancePercentage(record.totalHours, record.scheduledHours);
-      if (percentage === 0) {
-        const normalizedName = record.studentName.trim().toLowerCase();
-        const existingStudent = currentStudents.find(s =>
-          matchAttendanceRecordToStudent(record, s),
-        );
-        const returning = !existingStudent
-          ? findReturningStudentInClass(record.studentName.trim(), classId)
-          : undefined;
-        if (isFirstImport && !existingStudent && !returning) continue;
-        zeroAttendanceList.push({
-          name: record.studentName.trim(),
-          studentId: existingStudent?.id ?? returning?.id,
-        });
-      }
-    }
-    
-    // Parsed records to keep: exclude first-import zero new students, and exclude auto-ignored (DROPPED + zero)
-    const filteredRecords = result.records
-      .filter(r => !isDroppedZero(r))
-      .filter(r => {
-        if (!isFirstImport) return true;
-        const normalizedName = r.studentName.trim().toLowerCase();
-        const isNew = !isRecordOnRoster(r);
-        const hasZero = zeroAttendanceNames.has(normalizedName);
-        return !(isNew && hasZero);
+      const result = await parseAttendanceFileFromInput(importFile, {
+        rosterNormalizedNames: rosterNames,
       });
-    
-    const autoIgnoredCount = result.records.filter(isDroppedZero).length;
-    setParsedRecords(filteredRecords);
-    setParseErrors(
-      [
+
+      // Fatal parse failure — stay on month step with clear feedback
+      if (result.records.length === 0) {
+        const errors =
+          result.errors.length > 0
+            ? result.errors
+            : ['No valid attendance records found in this file. Check that it has student names and hours columns.'];
+        setParseErrors(errors);
+        setIsImporting(false);
+        return;
+      }
+
+      // Auto-ignore: DROPPED + zero hours — don't ask about them, don't import
+      const isDroppedZero = (r: AttendanceImportRow) => {
+        const pct = calculateAttendancePercentage(r.totalHours, r.scheduledHours);
+        const dropped = r.status && /dropped/i.test(r.status);
+        return pct === 0 && dropped;
+      };
+
+      const currentStudents = getStudentsByClass(classId, true);
+      const isRecordOnRoster = (record: AttendanceImportRow) =>
+        currentStudents.some(s => matchAttendanceRecordToStudent(record, s));
+      
+      // Check if this is a first-time import (empty active roster)
+      const isFirstImport = getStudentsByClass(classId).length === 0;
+      
+      // Pre-calculate which students have zero attendance (excluding auto-ignored dropped+zero)
+      const zeroAttendanceNames = new Set<string>();
+      for (const record of result.records) {
+        if (isDroppedZero(record)) continue;
+        const percentage = calculateAttendancePercentage(record.totalHours, record.scheduledHours);
+        if (percentage === 0) {
+          zeroAttendanceNames.add(record.studentName.trim().toLowerCase());
+        }
+      }
+      
+      // Find new students (in file but not in roster) WHO HAVE ACTUAL ATTENDANCE
+      // New students with 0% attendance will be shown in the zero attendance step instead
+      // Auto-ignored (DROPPED + zero) are never added
+      const newStudentNames: AttendanceImportRow[] = [];
+      let skippedZeroAttendance = 0;
+      for (const record of result.records) {
+        if (isDroppedZero(record)) continue;
+        const normalizedName = record.studentName.trim().toLowerCase();
+        if (!isRecordOnRoster(record)) {
+          // On first import, silently skip students with 0% attendance
+          if (isFirstImport && zeroAttendanceNames.has(normalizedName)) {
+            skippedZeroAttendance++;
+            continue;
+          }
+          // New students with 0% go to zero attendance step, not here
+          if (zeroAttendanceNames.has(normalizedName)) {
+            continue;
+          }
+          newStudentNames.push(record);
+        }
+      }
+      
+      // Find missing students (in roster but not in file)
+      const missingStudentsList: Student[] = [];
+      for (const student of getStudentsByClass(classId)) {
+        const inFile = result.records.some(
+          r => !isDroppedZero(r) && matchAttendanceRecordToStudent(r, student),
+        );
+        if (!inFile) {
+          missingStudentsList.push(student);
+        }
+      }
+      
+      // Find students with zero attendance — exclude auto-ignored (DROPPED + zero)
+      const zeroAttendanceList: { name: string; studentId?: string }[] = [];
+      for (const record of result.records) {
+        if (isDroppedZero(record)) continue;
+        const percentage = calculateAttendancePercentage(record.totalHours, record.scheduledHours);
+        if (percentage === 0) {
+          const existingStudent = currentStudents.find(s =>
+            matchAttendanceRecordToStudent(record, s),
+          );
+          const returning = !existingStudent
+            ? findReturningStudentInClass(record.studentName.trim(), classId)
+            : undefined;
+          if (isFirstImport && !existingStudent && !returning) continue;
+          zeroAttendanceList.push({
+            name: record.studentName.trim(),
+            studentId: existingStudent?.id ?? returning?.id,
+          });
+        }
+      }
+      
+      // Parsed records to keep: exclude first-import zero new students, and exclude auto-ignored (DROPPED + zero)
+      const filteredRecords = result.records
+        .filter(r => !isDroppedZero(r))
+        .filter(r => {
+          if (!isFirstImport) return true;
+          const normalizedName = r.studentName.trim().toLowerCase();
+          const isNew = !isRecordOnRoster(r);
+          const hasZero = zeroAttendanceNames.has(normalizedName);
+          return !(isNew && hasZero);
+        });
+      
+      const autoIgnoredCount = result.records.filter(isDroppedZero).length;
+      const nextErrors = [
         ...result.errors,
         ...(skippedZeroAttendance > 0 ? [`Skipped ${skippedZeroAttendance} student(s) with 0% attendance (first import)`] : []),
         ...(autoIgnoredCount > 0 ? [`${autoIgnoredCount} student(s) with DROPPED + 0 hours were automatically ignored`] : []),
-      ]
-    );
-    // Store ALL new student names (we'll filter out ignored ones later)
-    const today = new Date().toISOString().split('T')[0];
-    setNewStudents(
-      newStudentNames.map((record) => {
+      ];
+      const today = new Date().toISOString().split('T')[0];
+      const nextNewStudents = newStudentNames.map((record) => {
         const name = record.studentName.trim();
         const returning = findReturningStudentInClass(name, classId);
         return {
@@ -332,11 +365,9 @@ export default function AttendancePage() {
               : 'Returning (was promoted) — keeps existing data'
             : undefined,
         };
-      }),
-    );
-    setMissingStudents(missingStudentsList.map(student => ({ student, selected: false })));
-    setZeroAttendanceStudents(
-      zeroAttendanceList.map((item) => {
+      });
+      const nextMissingStudents = missingStudentsList.map(student => ({ student, selected: false }));
+      const nextZeroAttendanceStudents = zeroAttendanceList.map((item) => {
         const rec = result.records.find(
           (r) =>
             r.studentName.trim().toLowerCase() === item.name.trim().toLowerCase() && !isDroppedZero(r),
@@ -346,22 +377,39 @@ export default function AttendancePage() {
           action: 'record' as const, // Default to just recording 0%
           enrollDate: item.studentId ? undefined : rec?.suggestedEnrollmentDate ?? today,
         };
-      }),
-    );
-    
-    setIsImporting(false);
-    
-    // Determine which step to go to
-    if (zeroAttendanceList.length > 0) {
-      // Has zero attendance students - show that step first
-      setImportStep('review-zero');
-    } else if (newStudentNames.length > 0 || missingStudentsList.length > 0) {
-      // No zero attendance, but has new/missing students
-      setImportStep('review-new');
-    } else {
-      // Nothing to review. Pass the rows directly — setState has not flushed yet,
-      // so reading parsedRecords here would import an empty list.
-      handleConfirmImport(filteredRecords);
+      });
+
+      setParsedRecords(filteredRecords);
+      setParseErrors(nextErrors);
+      setNewStudents(nextNewStudents);
+      setMissingStudents(nextMissingStudents);
+      setZeroAttendanceStudents(nextZeroAttendanceStudents);
+      
+      setIsImporting(false);
+      
+      // Determine which step to go to
+      if (zeroAttendanceList.length > 0) {
+        // Has zero attendance students - show that step first
+        setImportStep('review-zero');
+      } else if (newStudentNames.length > 0 || missingStudentsList.length > 0) {
+        // No zero attendance, but has new/missing students
+        setImportStep('review-new');
+      } else {
+        // Nothing to review — import immediately using local snapshot.
+        // Do NOT rely on React state here: setParsedRecords has not flushed yet.
+        handleConfirmImport({
+          records: filteredRecords,
+          errors: nextErrors,
+          newStudents: nextNewStudents,
+          missingStudents: nextMissingStudents,
+          zeroAttendanceStudents: nextZeroAttendanceStudents,
+        });
+      }
+    } catch (err) {
+      setParseErrors([
+        `Failed to analyze file: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      ]);
+      setIsImporting(false);
     }
   };
   
@@ -372,20 +420,25 @@ export default function AttendancePage() {
     if (newStudents.length > 0 || missingStudents.length > 0) {
       setImportStep('review-new');
     } else {
-      // Nothing left to review - import directly
+      // Nothing left to review - import directly (state already committed from prior step)
       handleConfirmImport();
     }
   };
 
-  const handleConfirmImport = (recordsOverride?: AttendanceImportRow[]) => {
+  const handleConfirmImport = (snapshot?: ImportSnapshot) => {
     if (!currentClass) return;
-    const recordsToImport = recordsOverride ?? parsedRecords;
+
+    const records = snapshot?.records ?? parsedRecords;
+    const errors = snapshot?.errors ?? parseErrors;
+    const studentsToAdd = snapshot?.newStudents ?? newStudents;
+    const studentsMissing = snapshot?.missingStudents ?? missingStudents;
+    const zeroStudents = snapshot?.zeroAttendanceStudents ?? zeroAttendanceStudents;
     
     setIsImporting(true);
     
     // Build a map of zero attendance actions first (needed to check before adding new students)
     const zeroAttendanceActions = new Map<string, 'record' | 'vacation' | 'drop' | 'ignore'>();
-    for (const item of zeroAttendanceStudents) {
+    for (const item of zeroStudents) {
       zeroAttendanceActions.set(item.name.trim().toLowerCase(), item.action);
     }
     
@@ -404,7 +457,7 @@ export default function AttendancePage() {
       return item.name;
     };
 
-    for (const item of newStudents) {
+    for (const item of studentsToAdd) {
       if (item.selected) {
         const normalizedName = item.name.trim().toLowerCase();
         const zeroAction = zeroAttendanceActions.get(normalizedName);
@@ -428,9 +481,9 @@ export default function AttendancePage() {
       }
     }
 
-    for (const item of zeroAttendanceStudents) {
+    for (const item of zeroStudents) {
       if (!item.studentId && (item.action === 'record' || item.action === 'vacation')) {
-        const rec = parsedRecords.find(
+        const rec = records.find(
           r => r.studentName.trim().toLowerCase() === item.name.trim().toLowerCase(),
         );
         const input =
@@ -454,7 +507,7 @@ export default function AttendancePage() {
     
     // Drop missing students that were selected
     let droppedCount = 0;
-    for (const { student, selected } of missingStudents) {
+    for (const { student, selected } of studentsMissing) {
       if (selected) {
         dropStudent(student.id);
         droppedCount++;
@@ -462,7 +515,7 @@ export default function AttendancePage() {
     }
     
     // Handle zero attendance for EXISTING students (drop them if marked for drop)
-    for (const item of zeroAttendanceStudents) {
+    for (const item of zeroStudents) {
       if (item.action === 'drop' && item.studentId) {
         dropStudent(item.studentId);
         droppedCount++;
@@ -470,13 +523,14 @@ export default function AttendancePage() {
     }
     
     // Sync first/last names from file for all matched roster students
-    const nameRepair = repairStudentNamesFromAttendanceRecords(classId, recordsToImport);
+    const nameRepair = repairStudentNamesFromAttendanceRecords(classId, records);
     namesRepaired = nameRepair.updated.length;
 
     // Now import attendance for all students in the file
     let added = 0;
     let vacationCount = 0;
-    for (const record of recordsToImport) {
+    const unmatchedNames: string[] = [];
+    for (const record of records) {
       const normalizedName = record.studentName.trim().toLowerCase();
       const zeroAction = zeroAttendanceActions.get(normalizedName);
       
@@ -505,12 +559,25 @@ export default function AttendancePage() {
           setAttendance(student.id, importMonth, percentage, false, hours);
         }
         added++;
+      } else {
+        unmatchedNames.push(record.studentName);
       }
+    }
+
+    const resultErrors = [...errors];
+    if (added === 0 && records.length > 0) {
+      resultErrors.push(
+        'No attendance was saved. Student names in the file may not match the roster for this class (check AM vs PM).',
+      );
+    } else if (unmatchedNames.length > 0) {
+      resultErrors.push(
+        `Could not match ${unmatchedNames.length} student(s) from the file to this class roster.`,
+      );
     }
 
     setImportResult({
       added,
-      errors: parseErrors,
+      errors: resultErrors,
       newStudentsAdded: addedNewStudents.length,
       studentsReactivated,
       studentsDropped: droppedCount,
@@ -633,9 +700,13 @@ export default function AttendancePage() {
         <div className="card bg-blue-50 border-blue-200">
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="font-semibold text-blue-900">Import Complete</h3>
+              <h3 className="font-semibold text-blue-900">
+                {importResult.added > 0 ? 'Import Complete' : 'Import Finished — Nothing Saved'}
+              </h3>
               <p className="text-blue-800 mt-1">
-                Updated attendance for {importResult.added} students
+                {importResult.added > 0
+                  ? `Updated attendance for ${importResult.added} students`
+                  : 'No student attendance percentages were written for this month.'}
               </p>
               {importResult.studentsReactivated > 0 && (
                 <p className="text-teal-800 mt-1">
@@ -901,6 +972,16 @@ export default function AttendancePage() {
                   <p className="text-sm text-gray-500">
                     File: {importFile?.name}
                   </p>
+                  {parseErrors.length > 0 && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-700 text-sm">
+                      <p className="font-medium">Could not import this file</p>
+                      <ul className="list-disc list-inside mt-1">
+                        {parseErrors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-3 mt-6">
                   <button onClick={() => resetImportModal()} className="btn btn-secondary flex-1">
