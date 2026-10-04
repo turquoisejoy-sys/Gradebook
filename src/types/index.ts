@@ -155,6 +155,17 @@ export interface Attendance {
   percentage: number;  // 0-100
   isVacation: boolean; // If true, excluded from average
   createdAt: string;
+  /** Hours attended in the month, from the import file (null when entered by hand). */
+  hoursAttended?: number | null;
+  /** Report's "Class Scheduled Hrs in Date Range" for the month. */
+  scheduledHours?: number | null;
+  /** Per class day: hours the class met and hours this student attended. Lets the percentage be recalculated when the enrollment date changes. */
+  dailyHours?: Record<string, AttendanceDayHours> | null;
+}
+
+export interface AttendanceDayHours {
+  classHours: number;
+  studentHours: number;
 }
 
 // Report Card
@@ -306,6 +317,10 @@ export interface AttendanceImportRow {
   status?: string;
   /** When the file has per-day columns: first session date with any hours (YYYY-MM-DD) — for default enrollment */
   suggestedEnrollmentDate?: string;
+  /** Raw "Class Scheduled Hrs in Date Range" from the file (before any mid-month adjustment). */
+  reportScheduledHours?: number;
+  /** Per-day class and student hours, keyed by YYYY-MM-DD (only when the file has per-day columns). */
+  dailyHours?: Record<string, AttendanceDayHours>;
 }
 
 export interface UnitTestImportRow {

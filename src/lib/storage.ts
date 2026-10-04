@@ -17,7 +17,12 @@ import {
   StudentNote,
   SkillTag,
 } from '@/types';
-import { importNamesMatch, normalizeNameForMatching } from './calculations';
+import {
+  importNamesMatch,
+  normalizeNameForMatching,
+  attendancePercentForEnrollment,
+  type AttendanceHours,
+} from './calculations';
 import {
   buildStudentDisplayName,
   findStudentForAttendanceRecord,
@@ -646,8 +651,11 @@ export function updateStudent(studentId: string, updates: Partial<Student>): Stu
   const students = getStudents();
   const index = students.findIndex(s => s.id === studentId);
   if (index === -1) return null;
+  const enrollmentChanged =
+    updates.enrollmentDate !== undefined && updates.enrollmentDate !== students[index].enrollmentDate;
   students[index] = { ...students[index], ...updates, updatedAt: new Date().toISOString() };
   saveStudents(students);
+  if (enrollmentChanged) recalculateAttendanceForStudent(studentId);
   return students[index];
 }
 
@@ -1294,22 +1302,33 @@ export function getAttendanceByStudent(studentId: string): Attendance[] {
   return getAttendance().filter(a => a.studentId === studentId);
 }
 
+/**
+ * Save one month of attendance. Pass `hours` when the value comes from an import file so it can be
+ * recalculated later if the enrollment date changes; omit it for hand-typed values (clears any saved hours).
+ */
 export function setAttendance(
   studentId: string,
   month: string,
   percentage: number,
-  isVacation = false
+  isVacation = false,
+  hours?: AttendanceHours,
 ): Attendance {
   const allAttendance = getAttendance();
   const existingIndex = allAttendance.findIndex(
     a => a.studentId === studentId && a.month === month
   );
+  const hoursFields = {
+    hoursAttended: hours?.hoursAttended ?? null,
+    scheduledHours: hours?.scheduledHours ?? null,
+    dailyHours: hours?.dailyHours ?? null,
+  };
 
   if (existingIndex !== -1) {
     allAttendance[existingIndex] = {
       ...allAttendance[existingIndex],
       percentage,
       isVacation,
+      ...hoursFields,
     };
     saveAttendance(allAttendance);
     return allAttendance[existingIndex];
@@ -1322,10 +1341,32 @@ export function setAttendance(
     percentage,
     isVacation,
     createdAt: new Date().toISOString(),
+    ...hoursFields,
   };
   allAttendance.push(newAttendance);
   saveAttendance(allAttendance);
   return newAttendance;
+}
+
+/**
+ * Recalculate a student's imported months from their saved hours using their current enrollment date.
+ * Months typed in by hand or marked vacation are left alone. Returns how many months changed.
+ */
+export function recalculateAttendanceForStudent(studentId: string): number {
+  const student = getStudents().find(s => s.id === studentId);
+  if (!student) return 0;
+  const allAttendance = getAttendance();
+  let changed = 0;
+  for (const record of allAttendance) {
+    if (record.studentId !== studentId || record.isVacation) continue;
+    const pct = attendancePercentForEnrollment(record, student.enrollmentDate);
+    if (pct !== null && pct !== record.percentage) {
+      record.percentage = pct;
+      changed++;
+    }
+  }
+  if (changed > 0) saveAttendance(allAttendance);
+  return changed;
 }
 
 export function toggleVacation(studentId: string, month: string): boolean {
