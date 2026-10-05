@@ -8,6 +8,7 @@ import {
   deleteClass, 
   getStudentsByClass,
   isPromotedOnly,
+  updateClass,
   getCurrentAcademicYear,
   getAcademicYearOptions,
 } from '@/lib/storage';
@@ -125,6 +126,13 @@ export default function Dashboard() {
     }
   };
 
+  const handleToggleSchedule = (cls: Class, e: React.MouseEvent) => {
+    e.stopPropagation();
+    updateClass(cls.id, { schedule: cls.schedule === 'Evening' ? 'Morning' : 'Evening' });
+    setClasses(getClasses());
+    refreshClasses();
+  };
+
   const handleSelectClass = (classId: string) => {
     setCurrentClassId(classId);
   };
@@ -236,7 +244,13 @@ export default function Dashboard() {
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <h3 className="font-bold text-xl text-[var(--cace-navy)]">{cls.name}</h3>
-                    <p className="text-sm text-gray-500">{cls.schedule}</p>
+                    <span
+                      onClick={(e) => handleToggleSchedule(cls, e)}
+                      className="text-sm text-gray-500 hover:text-[var(--cace-teal)] hover:underline cursor-pointer"
+                      title={`Click to change to ${cls.schedule === 'Evening' ? 'Morning' : 'Evening'}`}
+                    >
+                      {cls.schedule}
+                    </span>
                   </div>
                   <div
                     onClick={(e) => handleDeleteClass(cls.id, e)}
