@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useApp } from '@/components/AppShell';
 import {
@@ -47,6 +47,84 @@ interface StudentWithTests {
 type SortColumn = 'name' | 'average' | string; // string = test name
 type SortDirection = 'asc' | 'desc' | null;
 
+interface ScoreCellProps {
+  score: number | null;
+  row: number;
+  col: number;
+  colorClass: string;
+  onCommit: (value: string) => boolean;
+}
+
+// Spreadsheet-style score input: type a score, then Enter/↓ moves down, ↑ moves up, Tab moves right.
+// Saves on blur; clearing the cell removes the score; invalid values revert.
+function ScoreCell({ score, row, col, colorClass, onCommit }: ScoreCellProps) {
+  const original = score !== null ? score.toString() : '';
+  const [draft, setDraft] = useState(original);
+  const [invalid, setInvalid] = useState(false);
+
+  useEffect(() => {
+    setDraft(original);
+  }, [original]);
+
+  const focusCell = (target: HTMLInputElement, rowOffset: number) => {
+    const table = target.closest('table');
+    const next = table?.querySelector<HTMLInputElement>(
+      `input[data-score-row="${row + rowOffset}"][data-score-col="${col}"]`
+    );
+    if (next) {
+      next.focus();
+      next.select();
+    } else {
+      target.blur();
+    }
+  };
+
+  const handleBlur = () => {
+    if (draft.trim() === original) {
+      setDraft(original);
+      return;
+    }
+    if (!onCommit(draft)) {
+      setInvalid(true);
+      setDraft(original);
+    }
+  };
+
+  return (
+    <td className={`border-l p-0 ${colorClass}`}>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={draft}
+        data-score-row={row}
+        data-score-col={col}
+        onChange={e => setDraft(e.target.value)}
+        onFocus={e => { setInvalid(false); e.target.select(); }}
+        onBlur={handleBlur}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            focusCell(e.currentTarget, 1);
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            focusCell(e.currentTarget, -1);
+          } else if (e.key === 'Escape') {
+            setDraft(original);
+            setInvalid(false);
+            // Blur after the revert renders so it isn't saved
+            const target = e.currentTarget;
+            setTimeout(() => target.blur(), 0);
+          }
+        }}
+        placeholder="—"
+        title={invalid ? 'Enter a score from 0 to 100' : undefined}
+        aria-label="Score"
+        className={`w-full min-w-[60px] bg-transparent text-center py-2 px-1 outline-none focus:bg-white focus:ring-2 focus:ring-inset focus:ring-blue-500 placeholder:text-gray-400 ${invalid ? 'ring-2 ring-inset ring-red-500' : ''}`}
+      />
+    </td>
+  );
+}
+
 export default function UnitTestsPage() {
   const params = useParams();
   const { setCurrentClassId, mounted } = useApp();
@@ -55,7 +133,9 @@ export default function UnitTestsPage() {
 
   const [currentClass, setCurrentClass] = useState<Class | null>(null);
   const [studentsWithTests, setStudentsWithTests] = useState<StudentWithTests[]>([]);
-  const [testColumns, setTestColumns] = useState<TestColumn[]>([]);
+  const [storedColumns, setStoredColumns] = useState<TestColumn[]>([]);
+  // Columns added with "Add Test" that don't have any scores yet
+  const [pendingColumns, setPendingColumns] = useState<TestColumn[]>([]);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importTestName, setImportTestName] = useState('');
   const [importTestDate, setImportTestDate] = useState(new Date().toISOString().split('T')[0]);
@@ -74,8 +154,6 @@ export default function UnitTestsPage() {
 
   const [newTestName, setNewTestName] = useState('');
   const [newTestDate, setNewTestDate] = useState(new Date().toISOString().split('T')[0]);
-  const [editingCell, setEditingCell] = useState<{ studentId: string; testName: string } | null>(null);
-  const [editScore, setEditScore] = useState('');
   const [showAddTestRow, setShowAddTestRow] = useState(false);
   const [editingTestIdx, setEditingTestIdx] = useState<number | null>(null);
   const [editTestName, setEditTestName] = useState('');
@@ -85,6 +163,12 @@ export default function UnitTestsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const highlightedRowRef = useRef<HTMLTableRowElement>(null);
   const [deleteConfirmIdx, setDeleteConfirmIdx] = useState<number | null>(null);
+
+  const testColumns = useMemo(() => {
+    const storedNames = new Set(storedColumns.map(c => c.testName));
+    return [...storedColumns, ...pendingColumns.filter(c => !storedNames.has(c.testName))]
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [storedColumns, pendingColumns]);
 
   // Scroll to highlighted student when search changes
   useEffect(() => {
@@ -100,6 +184,7 @@ export default function UnitTestsPage() {
       setCurrentClass(cls || null);
       if (cls) {
         setCurrentClassId(cls.id);
+        setPendingColumns([]);
         refreshData();
       }
     }
@@ -129,33 +214,27 @@ export default function UnitTestsPage() {
     const columns = Array.from(testColumnsMap.entries())
       .map(([testName, date]) => ({ testName, date }))
       .sort((a, b) => a.date.localeCompare(b.date));
-    setTestColumns(columns);
+    setStoredColumns(columns);
   };
 
-  const startEdit = (studentId: string, testName: string, test: UnitTest | null) => {
-    setEditingCell({ studentId, testName });
-    setEditScore(test?.score?.toString() || '');
-  };
+  // Returns false when the typed value isn't a valid score
+  const commitScore = (studentId: string, col: TestColumn, existingTest: UnitTest | null, value: string): boolean => {
+    const trimmed = value.trim();
 
-  const saveEdit = (studentId: string, testName: string, existingTest: UnitTest | null, testDate: string) => {
-    const score = editScore ? parseInt(editScore) : null;
-
-    if (existingTest) {
-      if (!editScore) {
-        deleteUnitTest(existingTest.id);
-      } else if (score !== null && score >= 0 && score <= 100) {
-        updateUnitTest(existingTest.id, { score });
+    if (trimmed === '') {
+      if (existingTest) deleteUnitTest(existingTest.id);
+    } else {
+      const score = Number(trimmed);
+      if (!Number.isFinite(score) || score < 0 || score > 100) return false;
+      if (existingTest) {
+        if (existingTest.score !== score) updateUnitTest(existingTest.id, { score });
+      } else {
+        addUnitTest(studentId, col.testName, col.date, score);
       }
-    } else if (score !== null && score >= 0 && score <= 100) {
-      addUnitTest(studentId, testName, testDate, score);
     }
 
-    setEditingCell(null);
     refreshData();
-  };
-
-  const cancelEdit = () => {
-    setEditingCell(null);
+    return true;
   };
 
   const handleSort = (column: SortColumn) => {
@@ -214,8 +293,14 @@ export default function UnitTestsPage() {
   const handleAddTestColumn = () => {
     if (!newTestName.trim() || !newTestDate) return;
     
-    // Add test column - scores will be added individually
-    setTestColumns(prev => [...prev, { testName: newTestName.trim(), date: newTestDate }]);
+    const testName = newTestName.trim();
+    if (testColumns.some(c => c.testName === testName)) {
+      alert(`A test named "${testName}" already exists.`);
+      return;
+    }
+
+    // Add an empty column - scores are typed directly into the table
+    setPendingColumns(prev => [...prev, { testName, date: newTestDate }]);
     setShowAddTestRow(false);
     setNewTestName('');
     setNewTestDate(new Date().toISOString().split('T')[0]);
@@ -251,8 +336,8 @@ export default function UnitTestsPage() {
       });
     }
     
-    setTestColumns(prev => prev.map((col, i) => 
-      i === idx ? { testName: newName, date: editTestDate } : col
+    setPendingColumns(prev => prev.map(col =>
+      col.testName === oldName ? { testName: newName, date: editTestDate } : col
     ));
     setEditingTestIdx(null);
     refreshData();
@@ -269,7 +354,7 @@ export default function UnitTestsPage() {
       }
     });
     
-    setTestColumns(prev => prev.filter((_, i) => i !== idx));
+    setPendingColumns(prev => prev.filter(col => col.testName !== testName));
     setDeleteConfirmIdx(null);
     refreshData();
   };
@@ -632,7 +717,7 @@ export default function UnitTestsPage() {
                   </th>
                 ))}
                 {testColumns.length === 0 && (
-                  <th className="text-center border-l min-w-[90px] text-gray-400">No tests yet</th>
+                  <th className="text-center border-l min-w-[90px] text-gray-400 font-normal">No tests yet — click Add Test</th>
                 )}
                 <th 
                   rowSpan={2} 
@@ -736,48 +821,16 @@ export default function UnitTestsPage() {
                     />
                   </td>
                   {testColumns.map((col, idx) => {
-                    const test = tests.find(t => t.testName === col.testName);
-                    const isEditing = editingCell?.studentId === student.id && editingCell?.testName === col.testName;
-                    
-                    if (isEditing) {
-                      return (
-                        <td key={idx} className="border-l p-1">
-                          <div className="flex items-center justify-center gap-1">
-                            <input
-                              type="number"
-                              value={editScore}
-                              onChange={e => setEditScore(e.target.value)}
-                              className="w-14 text-sm border rounded px-1 text-center"
-                              placeholder="Score"
-                              min="0"
-                              max="100"
-                              autoFocus
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') saveEdit(student.id, col.testName, test || null, col.date);
-                                if (e.key === 'Escape') cancelEdit();
-                              }}
-                            />
-                            <button 
-                              onClick={() => saveEdit(student.id, col.testName, test || null, col.date)}
-                              className="text-green-600 text-xs"
-                            >✓</button>
-                            <button 
-                              onClick={cancelEdit}
-                              className="text-gray-400 text-xs"
-                            >✕</button>
-                          </div>
-                        </td>
-                      );
-                    }
-                    
+                    const test = tests.find(t => t.testName === col.testName) || null;
                     return (
-                      <td
-                        key={idx}
-                        className={`text-center cursor-pointer hover:bg-gray-50 border-l ${test?.score !== undefined ? getScoreColor(test.score) : ''}`}
-                        onClick={() => startEdit(student.id, col.testName, test || null)}
-                      >
-                        {test?.score !== undefined ? test.score : '—'}
-                      </td>
+                      <ScoreCell
+                        key={col.testName}
+                        score={test ? test.score : null}
+                        row={rowIndex}
+                        col={idx}
+                        colorClass={test ? getScoreColor(test.score) : ''}
+                        onCommit={value => commitScore(student.id, col, test, value)}
+                      />
                     );
                   })}
                   {testColumns.length === 0 && (
@@ -800,7 +853,7 @@ export default function UnitTestsPage() {
 
       {/* Legend */}
       <div className="flex items-center gap-6 text-sm text-gray-600">
-        <span className="text-gray-500">Click any cell to edit</span>
+        <span className="text-gray-500">Type scores directly into the table — Enter moves down, Tab moves right. Clear a cell to remove a score.</span>
         <div className="flex items-center gap-2">
           <span className="w-4 h-4 rounded score-good"></span>
           <span>80%+ (Good)</span>
