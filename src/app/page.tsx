@@ -7,6 +7,7 @@ import {
   createClass, 
   deleteClass, 
   getStudentsByClass,
+  isPromotedOnly,
   getCurrentAcademicYear,
   getAcademicYearOptions,
 } from '@/lib/storage';
@@ -70,7 +71,7 @@ export default function Dashboard() {
     for (const cls of filteredClasses) {
       const students = getStudentsByClass(cls.id);
       const n = students.length;
-      const promotedCount = getStudentsByClass(cls.id, true).filter(s => s.isPromoted).length;
+      const promotedCount = getStudentsByClass(cls.id, true).filter(isPromotedOnly).length;
       const withReadingGain = students.filter(s => (s.casasReadingGain ?? 0) > 0).length;
       const withListeningGain = students.filter(s => (s.casasListeningGain ?? 0) > 0).length;
       const readingLevelDone = students.filter(s => s.casasReadingLevelComplete).length;

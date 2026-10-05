@@ -2,7 +2,7 @@
  * KPI snapshot + superlatives for the class KPI print tool.
  */
 
-import { getStudentsByClass } from '@/lib/storage';
+import { getStudentsByClass, isPromotedOnly } from '@/lib/storage';
 import {
   calculate30DayRetention,
   calculateYTDRetention,
@@ -34,7 +34,7 @@ export interface KpiSnapshot {
 export function getKpiSnapshot(classId: string, academicYear: string): KpiSnapshot {
   const students = getStudentsByClass(classId);
   const n = students.length;
-  const promotedCount = getStudentsByClass(classId, true).filter(s => s.isPromoted).length;
+  const promotedCount = getStudentsByClass(classId, true).filter(isPromotedOnly).length;
   const withReadingGain = students.filter(s => (s.casasReadingGain ?? 0) > 0).length;
   const withListeningGain = students.filter(s => (s.casasListeningGain ?? 0) > 0).length;
   const readingGains = students

@@ -53,6 +53,7 @@ WHERE table_schema = 'public'
     'casas_reading_level_complete',
     'casas_listening_level_complete',
     'first_name',
-    'last_name'
+    'last_name',
+    'exit_reason'
   )
 ORDER BY column_name;

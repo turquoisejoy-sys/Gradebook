@@ -159,6 +159,11 @@ function isMissingStudentGoalColumnError(error: unknown): boolean {
   return msg.includes('PGRST204') && /'goal'/i.test(msg);
 }
 
+function isMissingStudentExitReasonColumnError(error: unknown): boolean {
+  const msg = getSyncErrorMessage(error);
+  return msg.includes('PGRST204') && /exit_reason/i.test(msg);
+}
+
 function isMissingClassIsstColumnError(error: unknown): boolean {
   const msg = getSyncErrorMessage(error);
   return msg.includes('PGRST204') && /isst_groups/i.test(msg);
@@ -174,6 +179,7 @@ function studentToCloudRow(
   includeNameParts: boolean,
   includeTagIds: boolean,
   includeGoal: boolean,
+  includeExitReason: boolean,
 ): Record<string, unknown> {
   const row: Record<string, unknown> = {
     id: s.id,
@@ -202,6 +208,9 @@ function studentToCloudRow(
   if (includeGoal) {
     row.goal = s.goal ?? '';
   }
+  if (includeExitReason) {
+    row.exit_reason = s.exitReason ?? null;
+  }
   return row;
 }
 
@@ -215,6 +224,8 @@ function normalizeDownloadedStudent(row: Record<string, unknown>): Student {
     lastName: typeof s.lastName === 'string' ? s.lastName : '',
     // Left undefined when the cloud has no goal column, so a local goal is not overwritten
     goal: typeof s.goal === 'string' ? s.goal : undefined,
+    // Left undefined when the cloud has no exit_reason column, so a local value is not overwritten
+    exitReason: 'exit_reason' in row ? (row.exit_reason === 'transferred_out' ? 'transferred_out' : null) : undefined,
     isPromoted: s.isPromoted ?? false,
     promotedDate: s.promotedDate ?? null,
     casasReadingGain: s.casasReadingGain ?? null,
@@ -294,7 +305,9 @@ export async function uploadStudents(students: Student[]): Promise<void> {
   let includeNames = true;
   let includeTags = true;
   let includeGoal = true;
-  const toRows = () => students.map(s => studentToCloudRow(s, includeNames, includeTags, includeGoal));
+  let includeExitReason = true;
+  const toRows = () =>
+    students.map(s => studentToCloudRow(s, includeNames, includeTags, includeGoal, includeExitReason));
   let data = toRows();
   let { error } = await supabase.from('students').upsert(data, { onConflict: 'id' });
 
@@ -307,6 +320,8 @@ export async function uploadStudents(students: Student[]): Promise<void> {
       includeNames = false;
     } else if (includeGoal && isMissingStudentGoalColumnError(error)) {
       includeGoal = false;
+    } else if (includeExitReason && isMissingStudentExitReasonColumnError(error)) {
+      includeExitReason = false;
     } else {
       break;
     }

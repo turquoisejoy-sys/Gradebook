@@ -86,6 +86,11 @@ export interface Student {
   /** Left class successfully (e.g. promoted to next level) — excluded from active roster and retention */
   isPromoted: boolean;
   promotedDate: string | null;
+  /**
+   * Why an `isPromoted` student left. 'transferred_out' = moved to another teacher/class outside this
+   * gradebook (not a drop). Like promoted, excluded from the active roster and retention.
+   */
+  exitReason?: 'transferred_out' | null;
   /** From CASAS Student Gains report import (per modality) */
   casasReadingGain: number | null;
   casasListeningGain: number | null;

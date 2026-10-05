@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowRightIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ArrowRightIcon, ArrowRightStartOnRectangleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import {
   getClasses,
   createStudent,
@@ -9,6 +9,7 @@ import {
   dropStudent,
   promoteStudent,
   transferStudent,
+  transferStudentOut,
 } from '@/lib/storage';
 import { buildStudentDisplayName } from '@/lib/student-names';
 import { Student } from '@/types';
@@ -60,7 +61,10 @@ export default function StudentRosterModals({
 
   if (!current) return null;
 
-  const otherClasses = getClasses().filter(c => c.id !== classId);
+  // Only offer classes from the same school year as this class
+  const allClasses = getClasses();
+  const thisYear = allClasses.find(c => c.id === classId)?.academicYear;
+  const otherClasses = allClasses.filter(c => c.id !== classId && c.academicYear === thisYear);
 
   const finish = () => {
     onChanged();
@@ -234,10 +238,27 @@ export default function StudentRosterModals({
             </button>
           ) : (
             <div className="p-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm text-gray-500">
-              <span className="font-medium text-gray-700">Transfer</span> — add another class first (Dashboard)
-              to move students between sections.
+              <span className="font-medium text-gray-700">Transfer</span> — add another class for this school
+              year first (Dashboard) to move students between sections.
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              transferStudentOut(student.id);
+              finish();
+            }}
+            className="w-full p-4 text-left rounded-lg border-2 border-indigo-200 bg-indigo-50/60 hover:bg-indigo-50 transition-colors"
+          >
+            <span className="font-semibold text-[var(--cace-navy)] inline-flex items-center gap-2">
+              <ArrowRightStartOnRectangleIcon className="w-5 h-5 text-indigo-600 shrink-0" />
+              Transferred to another teacher/class
+            </span>
+            <p className="text-sm text-gray-600 mt-1">
+              Changed schedule to a teacher/class outside this gradebook. Not a drop — does not count against
+              retention. Listed under Promoted Students (Transferred out).
+            </p>
+          </button>
           <button
             type="button"
             onClick={() => {

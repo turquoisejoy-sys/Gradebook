@@ -252,6 +252,9 @@ export async function syncFromCloud(): Promise<boolean> {
         if (student.goal === undefined && localStudent.goal) {
           next = { ...next, goal: localStudent.goal };
         }
+        if (student.exitReason === undefined && localStudent.exitReason) {
+          next = { ...next, exitReason: localStudent.exitReason };
+        }
         const cloudTags = Array.isArray(student.tagIds) ? student.tagIds : [];
         const localTags = Array.isArray(localStudent.tagIds) ? localStudent.tagIds : [];
         if (cloudTags.length === 0 && localTags.length > 0) {
@@ -606,8 +609,22 @@ export function getDroppedStudents(): Student[] {
   return getStudents().filter(s => s.isDropped && !s.isPromoted);
 }
 
+/** Left for another teacher/class outside this gradebook (stored as isPromoted + exitReason). */
+export function isTransferredOut(s: Student): boolean {
+  return s.isPromoted && s.exitReason === 'transferred_out';
+}
+
+/** Truly promoted (excludes students transferred out to another teacher/class). */
+export function isPromotedOnly(s: Student): boolean {
+  return s.isPromoted && !isTransferredOut(s);
+}
+
 export function getPromotedStudents(): Student[] {
-  return getStudents().filter(s => s.isPromoted);
+  return getStudents().filter(isPromotedOnly);
+}
+
+export function getTransferredOutStudents(): Student[] {
+  return getStudents().filter(isTransferredOut);
 }
 
 export type CreateStudentInput =
@@ -673,6 +690,7 @@ export function dropStudent(studentId: string): void {
     droppedDate: new Date().toISOString().split('T')[0],
     isPromoted: false,
     promotedDate: null,
+    exitReason: null,
   });
 }
 
@@ -680,6 +698,21 @@ export function promoteStudent(studentId: string): void {
   updateStudent(studentId, {
     isPromoted: true,
     promotedDate: new Date().toISOString().split('T')[0],
+    exitReason: null,
+    isDropped: false,
+    droppedDate: null,
+  });
+}
+
+/**
+ * Student changed schedule to another teacher/class outside this gradebook. Removed from the roster but
+ * not counted as a drop (excluded from retention, like promoted).
+ */
+export function transferStudentOut(studentId: string): void {
+  updateStudent(studentId, {
+    isPromoted: true,
+    promotedDate: new Date().toISOString().split('T')[0],
+    exitReason: 'transferred_out',
     isDropped: false,
     droppedDate: null,
   });
@@ -703,6 +736,7 @@ export function reactivateStudentForClass(
     droppedDate: null,
     isPromoted: false,
     promotedDate: null,
+    exitReason: null,
   };
   if (enrollmentDate) updates.enrollmentDate = enrollmentDate;
   const updated = updateStudent(studentId, updates);
@@ -816,6 +850,7 @@ export function transferStudent(studentId: string, newClassId: string): void {
     droppedDate: null,
     isPromoted: false,
     promotedDate: null,
+    exitReason: null,
   });
 }
 
