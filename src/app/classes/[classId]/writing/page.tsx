@@ -18,7 +18,7 @@ import {
   upsertWritingResultScore,
 } from '@/lib/storage';
 import { parseFinalScoreFileFromInput } from '@/lib/parsers';
-import { compareStudentsByLastName } from '@/lib/calculations';
+import { compareStudentsByLastName, getColorLevel } from '@/lib/calculations';
 import type { Class, Student, WritingTest, WritingTestResult } from '@/types';
 import { ArrowUpTrayIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import InfoTip from '@/components/InfoTip';
@@ -130,6 +130,16 @@ export default function WritingPage() {
     }
     return avgMap;
   }, [tests, students, resultsMap]);
+
+  const getScoreColor = (percent: number | null) => {
+    if (!currentClass || percent === null) return '';
+    switch (getColorLevel(percent, currentClass.colorThresholds)) {
+      case 'good': return 'score-good';
+      case 'warning': return 'score-warning';
+      case 'poor': return 'score-poor';
+      default: return '';
+    }
+  };
 
   const createTest = () => {
     if (!newTitle.trim()) return;
@@ -429,9 +439,11 @@ export default function WritingPage() {
                           ? ''
                           : String(result.score);
                     const commentValue = draftComment !== undefined ? draftComment : (result?.comment || '');
-                    const isPassing = selectedTest && result?.score !== null && result?.score !== undefined
-                      ? result.score >= selectedTest.passingScore
-                      : null;
+                    const scorePercent =
+                      selectedTest && selectedTest.totalPoints > 0 && result?.score !== null && result?.score !== undefined
+                        ? (result.score / selectedTest.totalPoints) * 100
+                        : null;
+                    const average = writingAverageByStudent.get(student.id) ?? null;
                     return (
                       <tr key={student.id}>
                         <td className="sticky left-0 bg-white z-10">
@@ -445,9 +457,7 @@ export default function WritingPage() {
                           <div className="flex flex-col items-center gap-1">
                             <input
                               type="number"
-                              className={`input w-28 text-center ${
-                                isPassing === true ? 'border-green-300 bg-green-50' : ''
-                              } ${isPassing === false ? 'border-red-300 bg-red-50' : ''}`}
+                              className={`input w-28 text-center font-medium ${getScoreColor(scorePercent)}`}
                               min="0"
                               step="0.01"
                               max={selectedTest?.totalPoints ?? undefined}
@@ -456,7 +466,7 @@ export default function WritingPage() {
                               onBlur={() => persistScore(student.id)}
                               placeholder={selectedTest ? `0-${selectedTest.totalPoints}` : 'Score'}
                             />
-                            <span className="text-xs text-gray-500">
+                            <span className={`text-xs px-1.5 rounded ${scorePercent !== null ? getScoreColor(scorePercent) : 'text-gray-500'}`}>
                               {result?.score !== null && result?.score !== undefined && selectedTest
                                 ? formatPercent(result.score, selectedTest.totalPoints)
                                 : '—'}
@@ -464,9 +474,11 @@ export default function WritingPage() {
                           </div>
                         </td>
                         <td className="text-center">
-                          {writingAverageByStudent.has(student.id)
-                            ? `${writingAverageByStudent.get(student.id)!.toFixed(0)}%`
-                            : '—'}
+                          {average !== null ? (
+                            <span className={`px-2 py-0.5 rounded font-medium ${getScoreColor(average)}`}>
+                              {average.toFixed(0)}%
+                            </span>
+                          ) : '—'}
                         </td>
                         <td>
                           <input
@@ -483,6 +495,23 @@ export default function WritingPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {students.length > 0 && currentClass && (
+            <div className="flex items-center gap-6 text-sm text-gray-600">
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 rounded score-good"></span>
+                <span>{currentClass.colorThresholds.good}%+ (Good)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 rounded score-warning"></span>
+                <span>{currentClass.colorThresholds.warning}-{currentClass.colorThresholds.good - 1}% (Warning)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 rounded score-poor"></span>
+                <span>&lt;{currentClass.colorThresholds.warning}% (Needs Improvement)</span>
+              </div>
             </div>
           )}
         </>
