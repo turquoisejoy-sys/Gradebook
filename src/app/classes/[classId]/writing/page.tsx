@@ -46,7 +46,8 @@ export default function WritingPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [tests, setTests] = useState<WritingTest[]>([]);
   const [selectedTestId, setSelectedTestId] = useState('');
-  const [resultsMap, setResultsMap] = useState<Map<string, WritingTestResult>>(new Map());
+  // testId -> (studentId -> result), for every test in this class
+  const [allResults, setAllResults] = useState<Map<string, Map<string, WritingTestResult>>>(new Map());
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -55,6 +56,7 @@ export default function WritingPage() {
   const [newPassingScore, setNewPassingScore] = useState('60');
   const [newExitAssessmentType, setNewExitAssessmentType] = useState<'none' | 'midterm' | 'final'>('none');
 
+  // Keyed by `${testId}:${studentId}`
   const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
 
@@ -78,6 +80,7 @@ export default function WritingPage() {
 
     const writingTests = getWritingTestsByClass(classId);
     setTests(writingTests);
+    reloadResults(writingTests);
     setSelectedTestId(prev => {
       if (prev && writingTests.some(t => t.id === prev)) return prev;
       return writingTests[0]?.id || '';
@@ -89,20 +92,32 @@ export default function WritingPage() {
     refresh();
   }, [mounted, classId, setCurrentClassId]);
 
-  useEffect(() => {
-    if (!mounted) return;
-    if (!selectedTestId) {
-      setResultsMap(new Map());
-      return;
+  const reloadResults = (classTests: WritingTest[] = tests) => {
+    const map = new Map<string, Map<string, WritingTestResult>>();
+    for (const test of classTests) {
+      map.set(test.id, scoresToMap(getWritingResultsByTest(test.id)));
     }
-    setResultsMap(scoresToMap(getWritingResultsByTest(selectedTestId)));
-    setScoreDrafts({});
+    setAllResults(map);
+  };
+
+  useEffect(() => {
     setCommentDrafts({});
-  }, [mounted, selectedTestId]);
+  }, [selectedTestId]);
 
   const selectedTest = useMemo(
     () => tests.find(t => t.id === selectedTestId) || null,
     [tests, selectedTestId],
+  );
+
+  // Table columns: oldest test on the left, newest on the right
+  const testColumns = useMemo(
+    () => [...tests].sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title)),
+    [tests],
+  );
+
+  const resultsMap = useMemo(
+    () => allResults.get(selectedTestId) ?? new Map<string, WritingTestResult>(),
+    [allResults, selectedTestId],
   );
 
   const handleConfirmDeleteTest = () => {
@@ -113,12 +128,12 @@ export default function WritingPage() {
   };
 
   const writingAverageByStudent = useMemo(() => {
-    const allResults = getWritingTestResults();
+    const results = getWritingTestResults();
     const testsById = new Map(tests.map(t => [t.id, t]));
     const avgMap = new Map<string, number>();
     for (const student of students) {
       const percents: number[] = [];
-      for (const result of allResults) {
+      for (const result of results) {
         if (result.studentId !== student.id || result.score === null) continue;
         const test = testsById.get(result.testId);
         if (!test || test.totalPoints <= 0) continue;
@@ -129,7 +144,7 @@ export default function WritingPage() {
       }
     }
     return avgMap;
-  }, [tests, students, resultsMap]);
+  }, [tests, students, allResults]);
 
   const getScoreColor = (percent: number | null) => {
     if (!currentClass || percent === null) return '';
@@ -166,19 +181,24 @@ export default function WritingPage() {
     setSelectedTestId(created.id);
   };
 
-  const persistScore = (studentId: string) => {
-    if (!selectedTest) return;
-    const raw = scoreDrafts[studentId];
+  const persistScore = (test: WritingTest, studentId: string) => {
+    const key = `${test.id}:${studentId}`;
+    const raw = scoreDrafts[key];
     if (raw === undefined) return;
     const trimmed = raw.trim();
     const parsed = trimmed === '' ? null : Number(trimmed);
     if (parsed === null || Number.isNaN(parsed)) {
-      upsertWritingResultScore(selectedTest.id, studentId, null);
+      upsertWritingResultScore(test.id, studentId, null);
     } else {
-      const clamped = Math.max(0, Math.min(selectedTest.totalPoints, parsed));
-      upsertWritingResultScore(selectedTest.id, studentId, Math.round(clamped * 100) / 100);
+      const clamped = Math.max(0, Math.min(test.totalPoints, parsed));
+      upsertWritingResultScore(test.id, studentId, Math.round(clamped * 100) / 100);
     }
-    setResultsMap(scoresToMap(getWritingResultsByTest(selectedTest.id)));
+    setScoreDrafts(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    reloadResults();
   };
 
   const persistComment = (studentId: string) => {
@@ -186,7 +206,7 @@ export default function WritingPage() {
     const comment = commentDrafts[studentId];
     if (comment === undefined) return;
     upsertWritingResultComment(selectedTest.id, studentId, comment);
-    setResultsMap(scoresToMap(getWritingResultsByTest(selectedTest.id)));
+    reloadResults();
   };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -215,7 +235,7 @@ export default function WritingPage() {
       imported++;
     }
 
-    setResultsMap(scoresToMap(getWritingResultsByTest(selectedTest.id)));
+    reloadResults();
     setImportSummary({
       imported,
       unmatched: [...new Set(unmatched)],
@@ -335,7 +355,9 @@ export default function WritingPage() {
           <div className="card p-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
               <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Writing test</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Selected test (for import, delete, and comments) — or click a column header
+                </label>
                 <select
                   className="input w-full"
                   value={selectedTestId}
@@ -422,27 +444,41 @@ export default function WritingPage() {
                 <thead>
                   <tr>
                     <th className="sticky left-0 bg-[var(--cace-gray)] z-10">Student</th>
-                    <th className="text-center">Score</th>
-                    <th className="text-center">Avg %</th>
-                    <th>Comment</th>
+                    {testColumns.map(test => {
+                      const isSelected = test.id === selectedTestId;
+                      return (
+                        <th
+                          key={test.id}
+                          className={`text-center border-l min-w-[120px] cursor-pointer hover:bg-gray-200 ${
+                            isSelected ? 'bg-[var(--cace-teal)]/15' : ''
+                          }`}
+                          onClick={() => setSelectedTestId(test.id)}
+                          title="Select this test (for import, delete, and comments)"
+                        >
+                          <div className="font-semibold">{test.title}</div>
+                          <div className="text-xs font-normal text-gray-500">
+                            {new Date(test.date + 'T00:00:00').toLocaleDateString('en-US', {
+                              month: 'numeric', day: 'numeric', year: '2-digit',
+                            })}
+                            {' · '}/{test.totalPoints}
+                            {test.exitAssessmentType === 'midterm'
+                              ? ' · Midterm'
+                              : test.exitAssessmentType === 'final'
+                                ? ' · Final'
+                                : ''}
+                          </div>
+                        </th>
+                      );
+                    })}
+                    <th className="text-center border-l">Avg %</th>
+                    <th className="border-l">Comment{selectedTest ? ` (${selectedTest.title})` : ''}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {students.map(student => {
                     const result = resultsMap.get(student.id);
-                    const draftScore = scoreDrafts[student.id];
                     const draftComment = commentDrafts[student.id];
-                    const scoreValue =
-                      draftScore !== undefined
-                        ? draftScore
-                        : result?.score === null || result?.score === undefined
-                          ? ''
-                          : String(result.score);
                     const commentValue = draftComment !== undefined ? draftComment : (result?.comment || '');
-                    const scorePercent =
-                      selectedTest && selectedTest.totalPoints > 0 && result?.score !== null && result?.score !== undefined
-                        ? (result.score / selectedTest.totalPoints) * 100
-                        : null;
                     const average = writingAverageByStudent.get(student.id) ?? null;
                     return (
                       <tr key={student.id}>
@@ -453,34 +489,50 @@ export default function WritingPage() {
                             studentName={student.name}
                           />
                         </td>
-                        <td className="text-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <input
-                              type="number"
-                              className={`input w-28 text-center font-medium ${getScoreColor(scorePercent)}`}
-                              min="0"
-                              step="0.01"
-                              max={selectedTest?.totalPoints ?? undefined}
-                              value={scoreValue}
-                              onChange={e => setScoreDrafts(prev => ({ ...prev, [student.id]: e.target.value }))}
-                              onBlur={() => persistScore(student.id)}
-                              placeholder={selectedTest ? `0-${selectedTest.totalPoints}` : 'Score'}
-                            />
-                            <span className={`text-xs px-1.5 rounded ${scorePercent !== null ? getScoreColor(scorePercent) : 'text-gray-500'}`}>
-                              {result?.score !== null && result?.score !== undefined && selectedTest
-                                ? formatPercent(result.score, selectedTest.totalPoints)
-                                : '—'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="text-center">
+                        {testColumns.map(test => {
+                          const testResult = allResults.get(test.id)?.get(student.id);
+                          const savedScore =
+                            testResult?.score === null || testResult?.score === undefined ? null : testResult.score;
+                          const draftScore = scoreDrafts[`${test.id}:${student.id}`];
+                          const scoreValue = draftScore !== undefined ? draftScore : savedScore === null ? '' : String(savedScore);
+                          const scorePercent =
+                            test.totalPoints > 0 && savedScore !== null ? (savedScore / test.totalPoints) * 100 : null;
+                          return (
+                            <td
+                              key={test.id}
+                              className={`text-center border-l ${test.id === selectedTestId ? 'bg-[var(--cace-teal)]/5' : ''}`}
+                            >
+                              <div className="flex flex-col items-center gap-1">
+                                <input
+                                  type="number"
+                                  className={`input w-24 text-center font-medium ${getScoreColor(scorePercent)}`}
+                                  min="0"
+                                  step="0.01"
+                                  max={test.totalPoints}
+                                  value={scoreValue}
+                                  onChange={e =>
+                                    setScoreDrafts(prev => ({ ...prev, [`${test.id}:${student.id}`]: e.target.value }))
+                                  }
+                                  onBlur={() => persistScore(test, student.id)}
+                                  placeholder={`0-${test.totalPoints}`}
+                                />
+                                <span
+                                  className={`text-xs px-1.5 rounded ${scorePercent !== null ? getScoreColor(scorePercent) : 'text-gray-500'}`}
+                                >
+                                  {savedScore !== null ? formatPercent(savedScore, test.totalPoints) : '—'}
+                                </span>
+                              </div>
+                            </td>
+                          );
+                        })}
+                        <td className="text-center border-l">
                           {average !== null ? (
                             <span className={`px-2 py-0.5 rounded font-medium ${getScoreColor(average)}`}>
                               {average.toFixed(0)}%
                             </span>
                           ) : '—'}
                         </td>
-                        <td>
+                        <td className="border-l min-w-[220px]">
                           <input
                             type="text"
                             className="input w-full"
