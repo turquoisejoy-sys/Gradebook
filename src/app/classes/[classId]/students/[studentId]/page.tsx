@@ -178,7 +178,12 @@ export default function StudentHubPage() {
         onChange={reload}
       />
 
-      <StudentHubGoal studentId={studentId} goal={student.goal ?? ''} onChange={reload} />
+      <StudentHubGoal
+        studentId={studentId}
+        goal={student.goal ?? ''}
+        topsGoal={student.topsGoal ?? ''}
+        onChange={reload}
+      />
 
       <StudentFocusTags studentId={studentId} onChange={reload} />
 

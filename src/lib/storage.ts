@@ -252,6 +252,9 @@ export async function syncFromCloud(): Promise<boolean> {
         if (student.goal === undefined && localStudent.goal) {
           next = { ...next, goal: localStudent.goal };
         }
+        if (student.topsGoal === undefined && localStudent.topsGoal) {
+          next = { ...next, topsGoal: localStudent.topsGoal };
+        }
         if (student.exitReason === undefined && localStudent.exitReason) {
           next = { ...next, exitReason: localStudent.exitReason };
         }
