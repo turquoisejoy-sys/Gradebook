@@ -81,6 +81,8 @@ export interface Student {
   notes: string;          // Personal notes (not for report cards)
   /** Student goal, written on the student hub. */
   goal?: string;
+  /** Official TOPS goal picked from a fixed list on the student hub (for entry in TOPS). */
+  topsGoal?: string;
   isDropped: boolean;
   droppedDate: string | null;
   /** Left class successfully (e.g. promoted to next level) — excluded from active roster and retention */

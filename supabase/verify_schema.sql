@@ -54,6 +54,8 @@ WHERE table_schema = 'public'
     'casas_listening_level_complete',
     'first_name',
     'last_name',
-    'exit_reason'
+    'exit_reason',
+    'goal',
+    'tops_goal'
   )
 ORDER BY column_name;

@@ -10,6 +10,7 @@ import { MagnifyingGlassIcon, TrashIcon, XMarkIcon, PencilIcon, PrinterIcon } fr
 import Link from 'next/link';
 import InfoTip from '@/components/InfoTip';
 import { printAllStudentHubRecords } from '@/lib/student-hub-print';
+import { printTopsGoals } from '@/lib/tops-goals';
 
 export default function NotesPage() {
   const params = useParams();
@@ -229,10 +230,21 @@ export default function NotesPage() {
           </p>
         </div>
         {students.length > 0 && (
-          <button type="button" onClick={handlePrintAllStudentRecords} className="btn btn-secondary shrink-0">
-            <PrinterIcon className="w-5 h-5" />
-            Print all student records
-          </button>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => printTopsGoals(currentClass.name, students)}
+              className="btn btn-secondary"
+              title="Print every student's TOPS goal for this class"
+            >
+              <PrinterIcon className="w-5 h-5" />
+              Print TOPS goals
+            </button>
+            <button type="button" onClick={handlePrintAllStudentRecords} className="btn btn-secondary">
+              <PrinterIcon className="w-5 h-5" />
+              Print all student records
+            </button>
+          </div>
         )}
       </div>
 
