@@ -106,18 +106,19 @@ export function printIsstGroups(
     .map(({ label, groups, unplaced }) => {
       if (groups.length === 0 && unplaced.length === 0) return '';
       const groupsHtml = groups
-        .map((g, i) => `<div class="group"><h3>${escapeHtml(label)} ${groupLetter(i)} (${g.length})</h3>${list(g)}</div>`)
+        .map((g, i) => `<div class="group"><h3>${escapeHtml(label)} ${groupLetter(i)}</h3>${list(g)}</div>`)
         .join('');
       const unplacedHtml =
         unplaced.length > 0
-          ? `<div class="group unplaced"><h3>Needs a group (${unplaced.length})</h3>${list(unplaced)}</div>`
+          ? `<div class="group unplaced"><h3>Needs a group</h3>${list(unplaced)}</div>`
           : '';
-      return `<section><h2>${escapeHtml(label)}</h2><div class="grid">${groupsHtml}${unplacedHtml}</div></section>`;
+      const skillClass = `skill-${label.toLowerCase().replace(/[^a-z]/g, '')}`;
+      return `<section class="${skillClass}"><h2>${escapeHtml(label)}</h2><div class="grid">${groupsHtml}${unplacedHtml}</div></section>`;
     })
     .join('');
   const supportHtml =
     supportStudents.length > 0
-      ? `<section><h2>1-1 Support (${supportStudents.length})</h2>${list(supportStudents.map(s => s.id))}</section>`
+      ? `<section class="support"><h2>1-1 Support</h2>${list(supportStudents.map(s => s.id))}</section>`
       : '';
 
   const printWindow = window.open('', '_blank');
@@ -127,16 +128,26 @@ export function printIsstGroups(
   <head>
     <title>ISST groups — ${escapeHtml(className)}</title>
     <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1f2937; margin: 24px; }
-      h1 { font-size: 20px; margin: 0 0 4px; }
-      .sub { color: #6b7280; font-size: 12px; margin-bottom: 16px; }
-      h2 { font-size: 16px; margin: 16px 0 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
-      h3 { font-size: 13px; margin: 0 0 4px; }
-      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-      .group { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px; break-inside: avoid; }
+      @page { margin: 0.4in; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1f2937; margin: 0; }
+      h1 { font-size: 28px; margin: 0 0 2px; }
+      .sub { color: #6b7280; font-size: 12px; margin: 0 0 8px; }
+      h2 { font-size: 23px; margin: 8px 0 4px; border-bottom: 2px solid #d1d5db; padding-bottom: 2px; }
+      h3 { font-size: 20px; margin: 0 0 4px; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .group { border: 1px solid #9ca3af; border-radius: 6px; padding: 4px 8px; break-inside: avoid; }
       .unplaced { border-style: dashed; }
-      ul { margin: 0; padding-left: 18px; font-size: 13px; }
-      li { margin: 2px 0; }
+      ul { margin: 0; padding-left: 20px; font-size: 18px; line-height: 1.25; }
+      li { margin: 1px 0; }
+      .support ul { columns: 2; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .skill-speaking h2 { color: #c2410c; border-bottom-color: #f97316; }
+      .skill-speaking .group { border: 2px solid #f97316; background: #fff7ed; }
+      .skill-speaking h3 { color: #c2410c; }
+      .skill-writing h2 { color: #15803d; border-bottom-color: #22c55e; }
+      .skill-writing .group { border: 2px solid #22c55e; background: #f0fdf4; }
+      .skill-writing h3 { color: #15803d; }
+      .group.unplaced { border-style: dashed; }
     </style>
   </head>
   <body>
