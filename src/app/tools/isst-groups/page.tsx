@@ -11,19 +11,21 @@ import {
   ensureFocusAreaTags,
   getIsstGroups,
   GROUP_SIZE_OPTIONS,
+  groupIndexById,
   groupLetter,
   ISST_SKILLS,
   moveStudentInGroups,
   printIsstGroups,
   resolveGroups,
   saveIsstGroups,
-  splitIntoGroups,
+  splitIntoGroupsAvoiding,
   type MoveTarget,
 } from '@/lib/isst-groups';
 import type { Class, IsstSkill, Student } from '@/types';
 import {
   ArrowLeftIcon,
   ArrowPathIcon,
+  ExclamationTriangleIcon,
   IdentificationIcon,
   PrinterIcon,
   UserGroupIcon,
@@ -39,10 +41,12 @@ interface StudentChipProps {
   groupCount: number;
   currentIndex: number | 'unplaced';
   onMove: (target: MoveTarget) => void;
+  /** Set when the student has the same letter in the other skill, e.g. "Also in Writing A". */
+  sameLetterWarning?: string;
 }
 
 /** One draggable student, with a "Move to" menu for tablets and keyboards. */
-function StudentChip({ student, classId, skill, groupCount, currentIndex, onMove }: StudentChipProps) {
+function StudentChip({ student, classId, skill, groupCount, currentIndex, onMove, sameLetterWarning }: StudentChipProps) {
   return (
     <li
       draggable
@@ -50,11 +54,22 @@ function StudentChip({ student, classId, skill, groupCount, currentIndex, onMove
         e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ studentId: student.id, skill }));
         e.dataTransfer.effectAllowed = 'move';
       }}
-      className="flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm cursor-grab active:cursor-grabbing"
+      className={`flex items-center gap-1 rounded-md border px-2 py-1 text-sm cursor-grab active:cursor-grabbing ${
+        sameLetterWarning ? 'border-amber-400 bg-amber-50' : 'border-gray-200 bg-white'
+      }`}
     >
       <span className="flex-1 truncate" title={getStudentDisplayName(student)}>
         {getStudentDisplayName(student)}
       </span>
+      {sameLetterWarning && (
+        <span
+          className="shrink-0 text-amber-600"
+          title={`${sameLetterWarning}: comes to ISST two days in a row`}
+        >
+          <ExclamationTriangleIcon className="w-4 h-4" />
+          <span className="sr-only">{sameLetterWarning}</span>
+        </span>
+      )}
       <Link
         href={`/classes/${classId}/students/${student.id}`}
         className="p-0.5 text-gray-300 hover:text-[var(--cace-teal)]"
@@ -193,7 +208,17 @@ function IsstGroupsInner() {
     if (alreadyBuilt && !confirm('Rebuild these groups? Everyone will be re-split and manual moves will be lost.')) {
       return;
     }
-    save(skill, splitIntoGroups(taggedIds, saved.groupSize));
+    // Rule: nobody gets the same letter in Speaking and Writing (those meet on back-to-back days)
+    const other = skills.find(s => s.key !== skill);
+    const avoid = other?.built ? groupIndexById(other.groups) : new Map<string, number>();
+    const { groups, clashes } = splitIntoGroupsAvoiding(taggedIds, saved.groupSize, avoid);
+    save(skill, groups);
+    if (clashes.length > 0) {
+      const names = clashes.map(id => (studentsById.get(id) ? getStudentDisplayName(studentsById.get(id)!) : id));
+      alert(
+        `These students could not be kept out of their ${other?.label ?? 'other'} letter:\n\n${names.join('\n')}\n\nThey are marked with a warning — move them by hand if you can.`,
+      );
+    }
   };
 
   const move = (skill: IsstSkill, groups: string[][], studentId: string, target: MoveTarget) => {
@@ -229,7 +254,7 @@ function IsstGroupsInner() {
             <h1 className="text-2xl font-bold text-[var(--cace-navy)]">ISST groups</h1>
             <InfoTip
               wide
-              text="Students ticked for Speaking or Writing on their Student Hub are split into small groups you rotate through. Click Build groups once; groups stay the same until you Rebuild. Drag a student (or use Move…) to change their group. Newly tagged students wait under Needs a group."
+              text="Students ticked for Speaking or Writing on their Student Hub are split into small groups you rotate through. Click Build groups once; groups stay the same until you Rebuild. Drag a student (or use Move…) to change their group. Newly tagged students wait under Needs a group. Building keeps each student out of the same letter in Speaking and Writing (those days are back to back); a ⚠ marks anyone who still has the same letter."
             />
           </div>
           <p className="text-gray-600 mt-1">Speaking and Writing groups, plus your 1-1 Support list.</p>
@@ -319,6 +344,8 @@ function IsstGroupsInner() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {skill.groups.map((group, index) => {
+                    const other = skills.find(s => s.key !== skill.key);
+                    const otherIndex = other?.built ? groupIndexById(other.groups) : null;
                     const over = saved && group.length > saved.groupSize;
                     return (
                       <DropZone
@@ -348,6 +375,11 @@ function IsstGroupsInner() {
                                 groupCount={skill.groups.length}
                                 currentIndex={index}
                                 onMove={target => move(skill.key, skill.groups, id, target)}
+                                sameLetterWarning={
+                                  otherIndex?.get(id) === index
+                                    ? `Also in ${other!.label} ${groupLetter(index)}`
+                                    : undefined
+                                }
                               />
                             );
                           })}
