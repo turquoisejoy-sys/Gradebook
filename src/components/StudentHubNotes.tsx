@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PencilIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import InfoTip from '@/components/InfoTip';
@@ -14,6 +14,8 @@ interface StudentHubNotesProps {
   personalNotes: string;
   /** Reload hub data after a change. */
   onChange: () => void;
+  /** Told whether there is typed text that has not been saved yet. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const todayIso = () => new Date().toISOString().split('T')[0];
@@ -25,6 +27,7 @@ export default function StudentHubNotes({
   notes,
   personalNotes,
   onChange,
+  onDirtyChange,
 }: StudentHubNotesProps) {
   const [newDate, setNewDate] = useState(todayIso());
   const [newContent, setNewContent] = useState('');
@@ -33,6 +36,11 @@ export default function StudentHubNotes({
   const [editContent, setEditContent] = useState('');
   const [editingPersonal, setEditingPersonal] = useState(false);
   const [personalDraft, setPersonalDraft] = useState('');
+
+  const dirty = newContent.trim() !== '' || editingId !== null || editingPersonal;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   const handleAdd = () => {
     const content = newContent.trim();
