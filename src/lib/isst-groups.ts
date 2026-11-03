@@ -48,6 +48,52 @@ export function splitIntoGroups(ids: string[], maxSize: number): string[][] {
 }
 
 /**
+ * Split like splitIntoGroups, but keep each student out of the group whose index is in `avoid`
+ * (their group letter in the other skill), so nobody has Speaking X and Writing X on back-to-back days.
+ * Fixes clashes by swapping two students, which keeps group sizes the same.
+ * Returns ids that could not be moved (e.g. only one group).
+ */
+export function splitIntoGroupsAvoiding(
+  ids: string[],
+  maxSize: number,
+  avoid: Map<string, number>,
+): { groups: string[][]; clashes: string[] } {
+  const groups = splitIntoGroups(ids, maxSize);
+  const clashes: string[] = [];
+  groups.forEach((group, g) => {
+    for (let i = 0; i < group.length; i++) {
+      const id = group[i];
+      if (avoid.get(id) !== g) continue;
+      let swapped = false;
+      // Try the nearest groups first so the split stays close to A–Z order
+      const others = groups
+        .map((_, h) => h)
+        .filter(h => h !== g && avoid.get(id) !== h)
+        .sort((a, b) => Math.abs(a - g) - Math.abs(b - g));
+      for (const h of others) {
+        const j = groups[h].findIndex(other => avoid.get(other) !== g);
+        if (j === -1) continue;
+        [group[i], groups[h][j]] = [groups[h][j], id];
+        swapped = true;
+        break;
+      }
+      if (!swapped) clashes.push(id);
+    }
+  });
+  // Keep names in their original (A–Z) order inside each group
+  const order = new Map(ids.map((id, i) => [id, i]));
+  groups.forEach(group => group.sort((a, b) => order.get(a)! - order.get(b)!));
+  return { groups, clashes };
+}
+
+/** Student id → group index for one skill's groups. */
+export function groupIndexById(groups: string[][]): Map<string, number> {
+  const map = new Map<string, number>();
+  groups.forEach((group, i) => group.forEach(id => map.set(id, i)));
+  return map;
+}
+
+/**
  * Saved groups checked against who is tagged now: drops students who were untagged
  * or left the class (and any group left empty), and lists tagged students not yet placed.
  */

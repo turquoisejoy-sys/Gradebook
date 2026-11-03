@@ -11,10 +11,12 @@ interface StudentHubGoalProps {
   topsGoal: string;
   /** Reload hub data after saving. */
   onChange: () => void;
+  /** Told whether the written goal has unsaved changes. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 /** Official TOPS goal (dropdown) plus the student's goal in their own words (free text). */
-export default function StudentHubGoal({ studentId, goal, topsGoal, onChange }: StudentHubGoalProps) {
+export default function StudentHubGoal({ studentId, goal, topsGoal, onChange, onDirtyChange }: StudentHubGoalProps) {
   const [draft, setDraft] = useState(goal);
   const [saved, setSaved] = useState(false);
   const [topsSaved, setTopsSaved] = useState(false);
@@ -39,6 +41,9 @@ export default function StudentHubGoal({ studentId, goal, topsGoal, onChange }: 
   }, [studentId, goal]);
 
   const changed = draft.trim() !== goal.trim();
+  useEffect(() => {
+    onDirtyChange?.(changed);
+  }, [changed, onDirtyChange]);
 
   const handleSave = () => {
     updateStudent(studentId, { goal: draft.trim() });

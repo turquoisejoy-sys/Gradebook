@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useApp } from '@/components/AppShell';
 import InfoTip from '@/components/InfoTip';
 import StudentFocusTags from '@/components/StudentFocusTags';
@@ -10,10 +10,14 @@ import StudentHubNotes from '@/components/StudentHubNotes';
 import StudentHubGoal from '@/components/StudentHubGoal';
 import { getStudentHubData, type StudentHubData, type AssessmentDetailRow } from '@/lib/student-hub';
 import { printStudentHubRecord } from '@/lib/student-hub-print';
-import { getColorClass, getColorLevel } from '@/lib/calculations';
+import { getColorClass, getColorLevel, sortStudentsByLastName } from '@/lib/calculations';
+import { getStudentsByClass } from '@/lib/storage';
+import { getStudentDisplayName } from '@/lib/student-names';
 import { subscribeSyncStatus } from '@/lib/sync';
 import {
   ArrowLeftIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   DocumentTextIcon,
   PrinterIcon,
 } from '@heroicons/react/24/outline';
@@ -85,6 +89,29 @@ export default function StudentHubPage() {
 
   const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<StudentHubData | null>(null);
+  const router = useRouter();
+
+  // Unsaved typing per card, so moving to another student can warn first
+  const dirtyRef = useRef<Record<string, boolean>>({});
+  const setNotesDirty = useCallback((d: boolean) => { dirtyRef.current.notes = d; }, []);
+  const setGoalDirty = useCallback((d: boolean) => { dirtyRef.current.goal = d; }, []);
+
+  // Active students A–Z by last name (same order as Student Notes)
+  // Re-read whenever hub data reloads (e.g. after a cloud sync); empty until loaded in the browser
+  const roster = useMemo(
+    () => (data ? sortStudentsByLastName(getStudentsByClass(classId)) : []),
+    [classId, data],
+  );
+  const position = roster.findIndex(s => s.id === studentId);
+  const prevStudent = position > 0 ? roster[position - 1] : null;
+  const nextStudent = position >= 0 && position < roster.length - 1 ? roster[position + 1] : null;
+
+  const goToStudent = (id: string) => {
+    const hasUnsaved = Object.values(dirtyRef.current).some(Boolean);
+    if (hasUnsaved && !confirm('You have typing on this page that is not saved yet. Leave without saving?')) return;
+    dirtyRef.current = {};
+    router.push(`/classes/${classId}/students/${id}`);
+  };
 
   const reload = useCallback(() => {
     setData(getStudentHubData(classId, studentId));
@@ -123,19 +150,51 @@ export default function StudentHubPage() {
   }
 
   const { classData, student, totalStudents, notes, personalNotes } = data;
+
+  const studentNav =
+    position >= 0 && roster.length > 1 ? (
+      <div className="flex items-center gap-2 print:hidden">
+        <span className="text-sm text-gray-500 mr-1">
+          {position + 1} of {roster.length}
+        </span>
+        <button
+          type="button"
+          onClick={() => prevStudent && goToStudent(prevStudent.id)}
+          disabled={!prevStudent}
+          className="btn btn-secondary py-1.5 disabled:opacity-40"
+          title={prevStudent ? `Previous: ${getStudentDisplayName(prevStudent)}` : 'First student'}
+        >
+          <ChevronLeftIcon className="w-4 h-4" />
+          Previous
+        </button>
+        <button
+          type="button"
+          onClick={() => nextStudent && goToStudent(nextStudent.id)}
+          disabled={!nextStudent}
+          className="btn btn-primary py-1.5 disabled:opacity-40"
+          title={nextStudent ? `Next: ${getStudentDisplayName(nextStudent)}` : 'Last student'}
+        >
+          {nextStudent ? `Next: ${getStudentDisplayName(nextStudent)}` : 'Last student'}
+          <ChevronRightIcon className="w-4 h-4" />
+        </button>
+      </div>
+    ) : null;
   const thresholds = classData.colorThresholds;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          href={`/classes/${classId}/attendance`}
+          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-[var(--cace-teal)] print:hidden"
+        >
+          <ArrowLeftIcon className="w-4 h-4" />
+          Attendance
+        </Link>
+        {studentNav}
+      </div>
+      <div className="flex flex-wrap items-start justify-between gap-4 !mt-2">
         <div>
-          <Link
-            href={`/classes/${classId}/attendance`}
-            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-[var(--cace-teal)] mb-2"
-          >
-            <ArrowLeftIcon className="w-4 h-4" />
-            Attendance
-          </Link>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-[var(--cace-navy)]">{student.name}</h1>
             <InfoTip text="All stats, notes, and speaking/writing scores for this student. Add or edit notes right here. Print student record for their file folder. Print progress report opens the formal Report Cards page." />
@@ -171,18 +230,22 @@ export default function StudentHubPage() {
       </div>
 
       <StudentHubNotes
+        key={`notes-${studentId}`}
         classId={classId}
         studentId={studentId}
         notes={notes}
         personalNotes={personalNotes}
         onChange={reload}
+        onDirtyChange={setNotesDirty}
       />
 
       <StudentHubGoal
+        key={`goal-${studentId}`}
         studentId={studentId}
         goal={student.goal ?? ''}
         topsGoal={student.topsGoal ?? ''}
         onChange={reload}
+        onDirtyChange={setGoalDirty}
       />
 
       <StudentFocusTags studentId={studentId} onChange={reload} />
