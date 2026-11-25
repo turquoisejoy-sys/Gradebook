@@ -29,6 +29,8 @@ export interface CasasImportApplyResult {
   rosterSkipped: number;
   /** Rows dated before the course start date (not imported). */
   beforeCourseStartSkipped: number;
+  /** Rows with no score (blank, "*", invalid) — not imported. */
+  noScoreSkipped: number;
   /** Course start cutoff used for this import (YYYY-MM-DD). */
   courseStartDate: string;
   rosterNotFoundNames: string[];
@@ -168,12 +170,19 @@ export function applyCasasParseResult(
   let listeningSkipped = 0;
   let rosterSkipped = 0;
   let beforeCourseStartSkipped = 0;
+  let noScoreSkipped = 0;
   const courseStartDate = getCourseStartDate(classId);
 
   const applyRow = (row: CASASImportRow, kind: 'reading' | 'listening') => {
     // Only import tests taken on or after the start of the current course.
     if (!row.date || row.date < courseStartDate) {
       beforeCourseStartSkipped++;
+      return;
+    }
+
+    // Tests with no score (blank, "*", invalid) are not imported.
+    if (row.score === null || row.score === undefined) {
+      noScoreSkipped++;
       return;
     }
 
@@ -216,7 +225,7 @@ export function applyCasasParseResult(
     const reading = getCASASTestsByStudent(student.id, 'reading').length;
     const listening = getCASASTestsByStudent(student.id, 'listening').length;
     const inCourse = (r: CASASImportRow) =>
-      !!r.date && r.date >= courseStartDate && importNamesMatch(name, r.studentName);
+      !!r.date && r.date >= courseStartDate && r.score !== null && importNamesMatch(name, r.studentName);
     const fileReading = result.reading.filter(inCourse).length;
     const fileListening = result.listening.filter(inCourse).length;
     if (fileReading > 0 && reading === 0) {
@@ -242,6 +251,7 @@ export function applyCasasParseResult(
     listeningSkipped,
     rosterSkipped,
     beforeCourseStartSkipped,
+    noScoreSkipped,
     courseStartDate,
     rosterNotFoundNames: [...rosterNotFoundSet].sort((a, b) => a.localeCompare(b)),
     rosterWrongClassHints,
