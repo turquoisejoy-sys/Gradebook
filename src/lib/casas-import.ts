@@ -4,6 +4,7 @@ import { CASASParseResult } from './parsers/casas-parser';
 import {
   addCASASTest,
   getClasses,
+  getCurrentAcademicYear,
   getCASASTestsByStudent,
   getStudents,
   getStudentsByClass,
@@ -26,6 +27,12 @@ export interface CasasImportApplyResult {
   listeningAdded: number;
   listeningSkipped: number;
   rosterSkipped: number;
+  /** Rows dated before the course start date (not imported). */
+  beforeCourseStartSkipped: number;
+  /** Rows with no score (blank, "*", invalid) — not imported. */
+  noScoreSkipped: number;
+  /** Course start cutoff used for this import (YYYY-MM-DD). */
+  courseStartDate: string;
   rosterNotFoundNames: string[];
   /** Name in file but student lives in a different class in the gradebook. */
   rosterWrongClassHints: string[];
@@ -131,6 +138,20 @@ function finalizeStudentTotals(map: Map<string, CasasStudentImportSummary>): voi
   }
 }
 
+/** Month/day the course year starts. Tests dated before this are ignored on import. */
+export const COURSE_START_MONTH_DAY = '08-01';
+
+/**
+ * Start date of the course for a class (YYYY-MM-DD), based on its academic year
+ * (e.g. "2026-2027" -> "2026-08-01"). Falls back to the current academic year.
+ */
+export function getCourseStartDate(classId: string): string {
+  const cls = getClasses().find(c => c.id === classId);
+  const year = cls?.academicYear || getCurrentAcademicYear();
+  const startYear = parseInt(year.split('-')[0], 10);
+  return `${startYear}-${COURSE_START_MONTH_DAY}`;
+}
+
 /** Import reading and listening rows for students on this class roster only. */
 export function applyCasasParseResult(
   classId: string,
@@ -148,8 +169,23 @@ export function applyCasasParseResult(
   let listeningAdded = 0;
   let listeningSkipped = 0;
   let rosterSkipped = 0;
+  let beforeCourseStartSkipped = 0;
+  let noScoreSkipped = 0;
+  const courseStartDate = getCourseStartDate(classId);
 
   const applyRow = (row: CASASImportRow, kind: 'reading' | 'listening') => {
+    // Only import tests taken on or after the start of the current course.
+    if (!row.date || row.date < courseStartDate) {
+      beforeCourseStartSkipped++;
+      return;
+    }
+
+    // Tests with no score (blank, "*", invalid) are not imported.
+    if (row.score === null || row.score === undefined) {
+      noScoreSkipped++;
+      return;
+    }
+
     const student = pickStudentForImportName(row.studentName, classId, warnings);
 
     if (!student) {
@@ -188,8 +224,10 @@ export function applyCasasParseResult(
     const student = activeOnRoster[0];
     const reading = getCASASTestsByStudent(student.id, 'reading').length;
     const listening = getCASASTestsByStudent(student.id, 'listening').length;
-    const fileReading = result.reading.filter(r => importNamesMatch(name, r.studentName)).length;
-    const fileListening = result.listening.filter(r => importNamesMatch(name, r.studentName)).length;
+    const inCourse = (r: CASASImportRow) =>
+      !!r.date && r.date >= courseStartDate && r.score !== null && importNamesMatch(name, r.studentName);
+    const fileReading = result.reading.filter(inCourse).length;
+    const fileListening = result.listening.filter(inCourse).length;
     if (fileReading > 0 && reading === 0) {
       warnings.push(
         `"${student.name}" has ${fileReading} reading row(s) in the file but 0 reading scores on the active roster — check Dropped Students for a duplicate entry.`,
@@ -212,6 +250,9 @@ export function applyCasasParseResult(
     listeningAdded,
     listeningSkipped,
     rosterSkipped,
+    beforeCourseStartSkipped,
+    noScoreSkipped,
+    courseStartDate,
     rosterNotFoundNames: [...rosterNotFoundSet].sort((a, b) => a.localeCompare(b)),
     rosterWrongClassHints,
     studentsUpdated,
