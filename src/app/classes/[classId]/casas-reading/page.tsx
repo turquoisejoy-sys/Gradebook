@@ -463,6 +463,12 @@ export default function CASASReadingPage() {
                   where those students appear under Students.
                 </p>
               )}
+              {showImportResult.beforeCourseStartSkipped > 0 && (
+                <p className="text-gray-700 mt-1 text-sm">
+                  Skipped {showImportResult.beforeCourseStartSkipped} test(s) dated before the course start (
+                  {showImportResult.courseStartDate}).
+                </p>
+              )}
               {showImportResult.rosterSkipped > 0 && (
                 <p className="text-gray-700 mt-1 text-sm">
                   Skipped {showImportResult.rosterSkipped} row(s) for names not on this roster.
